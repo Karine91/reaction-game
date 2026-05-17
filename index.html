@@ -2,11 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Reaction Timer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0D0D0F" />
+  <title>Reaction Timer — How fast are you?</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
 
   <script type="importmap">
     {
@@ -18,1021 +23,1085 @@
   </script>
 
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --void:        #0D0D0F;
-      --surface:     #141417;
-      --signal:      #7F77DD;
-      --go:          #1D9E75;
-      --false-start: #D85A30;
-      --text-primary:#F0EEF8;
-      --text-muted:  #888780;
-      --font-ui:     'DM Sans', sans-serif;
-      --font-mono:   'JetBrains Mono', monospace;
+      --void: #0D0D0F;
+      --surface: #141417;
+      --signal: #7F77DD;
+      --signal-soft: #AFA9EC;
+      --go: #1D9E75;
+      --go-soft: #5DCAA5;
+      --coral: #D85A30;
+      --text-primary: #F0EEF8;
+      --text-muted: #888780;
+      --border: rgba(240, 238, 248, 0.08);
     }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      width: 100%; height: 100%;
+      height: 100%;
       background: var(--void);
       color: var(--text-primary);
-      font-family: var(--font-ui);
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
       overflow: hidden;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    /* ── Canvas ───────────────────────────────────────────────────── */
-    #canvas-container {
-      position: fixed; inset: 0; z-index: 0;
-    }
-    #canvas-container canvas {
-      display: block; width: 100% !important; height: 100% !important;
-    }
-
-    /* ── Full-screen click zone ───────────────────────────────────── */
-    /* Active during waiting + react — the WHOLE screen becomes clickable */
-    #click-zone {
-      position: fixed; inset: 0; z-index: 5;
-      pointer-events: none;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    #click-zone.active { pointer-events: auto; }
-
-    /* Pulsing ring centred on the 3D shape — signals "tap anywhere" */
-    #click-ring {
-      position: absolute;
-      width: 200px; height: 200px;
-      border-radius: 50%;
-      border: 2px solid transparent;
-      pointer-events: none;
-      transition: border-color 0.5s ease;
-    }
-    #click-zone.show-ring #click-ring {
-      border-color: rgba(127,119,221,0.40);
-      animation: ring-idle 2.2s ease-in-out infinite;
-    }
-    #click-zone.react-ring #click-ring {
-      border-color: rgba(29,158,117,0.75);
-      animation: ring-burst 0.25s cubic-bezier(0.22,1,0.36,1) forwards,
-                 ring-go    0.9s ease-in-out 0.25s infinite;
-    }
-    #click-zone.false-ring #click-ring {
-      border-color: rgba(216,90,48,0.65);
-      animation: ring-shake 0.4s ease;
-    }
-
-    @keyframes ring-idle {
-      0%,100% { transform: scale(1);    opacity: 0.65; }
-      50%      { transform: scale(1.09); opacity: 1;   }
-    }
-    @keyframes ring-burst {
-      from { transform: scale(0.5); opacity: 0; }
-      to   { transform: scale(1.3); opacity: 1; }
-    }
-    @keyframes ring-go {
-      0%,100% { transform: scale(1.3);  opacity: 1;   }
-      50%      { transform: scale(1.45); opacity: 0.75; }
-    }
-    @keyframes ring-shake {
-      0%,100% { transform: translateX(0); }
-      25%      { transform: translateX(-10px); }
-      75%      { transform: translateX(10px); }
-    }
-
-    /* "Tap anywhere" label — floats below the ring */
-    #tap-anywhere {
-      position: absolute;
-      top: calc(50% + 115px);
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 11px;
-      font-weight: 500;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: rgba(136,135,128,0.0);
-      white-space: nowrap;
-      pointer-events: none;
-      transition: color 0.5s ease;
-    }
-    #click-zone.active #tap-anywhere {
-      color: rgba(136,135,128,0.55);
-    }
-    #click-zone.react-ring #tap-anywhere {
-      color: rgba(29,158,117,0.8);
-    }
-
-    /* ── UI Layer ─────────────────────────────────────────────────── */
-    #ui-layer {
-      position: fixed; inset: 0; z-index: 10;
-      pointer-events: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* ── Game Panel ───────────────────────────────────────────────── */
-    #game-panel {
-      pointer-events: auto;
-      background: rgba(13,13,15,0.72);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(240,238,248,0.09);
-      border-radius: 24px;
-      padding: 40px 36px 36px;
-      width: min(420px, calc(100vw - 32px));
-      text-align: center;
       user-select: none;
+      -webkit-user-select: none;
       -webkit-tap-highlight-color: transparent;
-      transition: background 0.4s ease, border-color 0.4s ease;
-      animation: panel-in 0.55s cubic-bezier(0.16,1,0.3,1) both;
+      overscroll-behavior: none;
     }
 
-    /* During waiting/react the panel steps back — click-zone takes over */
-    #game-panel.state-waiting,
-    #game-panel.state-react {
+    /* Layer 1: Three.js canvas, full viewport, sits beneath the UI */
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+    #canvas-container canvas { display: block; }
+
+    /* Layer 2: HTML UI floats on top. pointer-events:none lets clicks
+       fall through to the document so the entire viewport is one
+       click target — the panel inside re-enables pointer events. */
+    #ui-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
       pointer-events: none;
-      background: rgba(13,13,15,0.40);
-    }
-    #game-panel.state-react {
-      background: rgba(13,13,15,0.18);
-      border-color: rgba(29,158,117,0.22);
-    }
-    #game-panel.state-false-start {
-      border-color: rgba(216,90,48,0.45);
-    }
-
-    @keyframes panel-in {
-      from { opacity: 0; transform: translateY(14px) scale(0.97); }
-      to   { opacity: 1; transform: translateY(0)    scale(1);    }
-    }
-
-    /* ── Round pips ───────────────────────────────────────────────── */
-    #round-track {
       display: flex;
+      align-items: center;
       justify-content: center;
-      gap: 8px;
+      padding: 24px;
+    }
+
+    #game-panel {
+      position: relative;
+      pointer-events: auto;
+      width: 100%;
+      max-width: 480px;
+      padding: 40px 48px;
+      text-align: center;
+      background: rgba(13, 13, 15, 0.65);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      transition: background 0.35s ease, border-color 0.35s ease,
+                  backdrop-filter 0.35s ease, transform 0.25s ease;
+    }
+
+    /* React state: the Three.js burst IS the visual — panel gets out of the way */
+    #game-panel[data-state="react"] {
+      background: transparent;
+      border-color: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    #game-panel[data-state="false-start"] {
+      border-color: rgba(216, 90, 48, 0.35);
+    }
+
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .round-indicator {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.14em;
+      margin-bottom: 18px;
+    }
+
+    .title {
+      font-size: 36px;
+      font-weight: 500;
+      line-height: 1.15;
+      margin-bottom: 12px;
+    }
+    .title-accent { color: var(--signal); }
+    .title.go {
+      font-size: 104px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      text-shadow: 0 0 32px rgba(29, 158, 117, 0.45);
+    }
+    .title.coral { color: var(--coral); }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 15px;
       margin-bottom: 28px;
     }
-    .pip {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: rgba(240,238,248,0.13);
-      transition: background 0.35s ease, transform 0.35s ease;
-    }
-    .pip.done   { background: var(--signal); }
-    .pip.active { background: var(--go); transform: scale(1.45); }
 
-    /* ── State label ──────────────────────────────────────────────── */
-    #state-label {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.20em;
+    .hint {
+      display: inline-block;
+      font-size: 11px;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--text-muted);
-      margin-bottom: 10px;
-      min-height: 14px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      margin-bottom: 28px;
     }
 
-    /* ── Main heading ─────────────────────────────────────────────── */
-    #main-heading {
-      font-size: clamp(26px, 5.5vw, 44px);
-      font-weight: 500;
-      line-height: 1.1;
-      letter-spacing: -0.02em;
-      margin-bottom: 8px;
-      transition: color 0.3s ease;
-    }
-    #main-heading.mono {
-      font-family: var(--font-mono);
-      font-size: clamp(38px, 9vw, 68px);
-      letter-spacing: -0.04em;
-    }
-
-    /* ── Sub text ─────────────────────────────────────────────────── */
-    #sub-text {
-      font-size: 14px;
-      color: var(--text-muted);
-      line-height: 1.6;
-      min-height: 20px;
-      margin-bottom: 22px;
-    }
-
-    /* ── Instructions ─────────────────────────────────────────────── */
-    #instructions {
-      display: none;
-      flex-direction: column;
-      gap: 11px;
-      text-align: left;
-      background: rgba(255,255,255,0.025);
-      border: 1px solid rgba(240,238,248,0.07);
-      border-radius: 14px;
-      padding: 18px 18px;
-      margin-bottom: 22px;
-    }
-    #instructions.visible { display: flex; }
-
-    .instr-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 11px;
-      font-size: 13px;
-      color: var(--text-muted);
-      line-height: 1.45;
-    }
-    .instr-num {
-      flex-shrink: 0;
-      width: 20px; height: 20px;
-      border-radius: 50%;
-      background: rgba(127,119,221,0.18);
-      color: var(--signal);
-      font-size: 10px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-top: 1px;
-    }
-    .instr-text strong { color: var(--text-primary); font-weight: 500; }
-
-    /* ── CTA Button ───────────────────────────────────────────────── */
-    #cta-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 140px;
-      min-height: 50px;
+    .btn {
+      display: inline-block;
+      min-height: 48px;
+      min-width: 160px;
       padding: 14px 36px;
-      border-radius: 100px;
-      border: none;
-      font-family: var(--font-ui);
+      font-family: inherit;
       font-size: 15px;
       font-weight: 500;
       letter-spacing: 0.02em;
-      cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.3s ease;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #cta-btn:hover  { transform: scale(1.05); }
-    #cta-btn:active { transform: scale(0.97); }
-    #cta-btn.hidden { display: none; }
-    #cta-btn.variant-start {
+      color: var(--void);
       background: var(--signal);
-      color: #fff;
-      box-shadow: 0 0 28px rgba(127,119,221,0.38);
+      border: 1px solid var(--signal);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.2s ease,
+                  background 0.2s ease, border-color 0.2s ease;
     }
-    #cta-btn.variant-start:hover { box-shadow: 0 0 40px rgba(127,119,221,0.55); }
-    #cta-btn.variant-again {
-      background: var(--go);
-      color: #fff;
-      box-shadow: 0 0 24px rgba(29,158,117,0.35);
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(127, 119, 221, 0.25); }
+    .btn:active { transform: translateY(0); }
+    .btn:focus-visible { outline: 2px solid var(--signal-soft); outline-offset: 3px; }
+    .btn-coral { background: var(--coral); border-color: var(--coral); color: #fff; }
+    .btn-coral:hover { box-shadow: 0 8px 24px rgba(216, 90, 48, 0.28); }
+
+    .result-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      margin: 8px 0 14px;
+      line-height: 1;
+    }
+    .result-time .ms { font-size: 80px; color: var(--text-primary); }
+    .result-time .unit { font-size: 22px; color: var(--text-muted); margin-left: 6px; }
+
+    .rating {
+      font-size: 13px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+    .r-lightning { color: var(--go-soft); }
+    .r-sharp { color: var(--signal); }
+    .r-average { color: var(--text-primary); }
+    .r-sluggish { color: var(--coral); }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 18px 0 18px;
+    }
+    .stat {
+      background: rgba(240, 238, 248, 0.03);
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--text-muted);
+      border-radius: 12px;
+      padding: 14px 8px 16px;
+      transition: background 0.25s ease, border-color 0.25s ease;
+    }
+    .stat.r-lightning { border-top-color: var(--go-soft);    background: rgba( 93, 202, 165, 0.07); }
+    .stat.r-sharp     { border-top-color: var(--signal);     background: rgba(127, 119, 221, 0.07); }
+    .stat.r-average   { border-top-color: var(--text-muted); }
+    .stat.r-sluggish  { border-top-color: var(--coral);      background: rgba(216,  90,  48, 0.07); }
+
+    .stat-label {
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 26px;
+      color: var(--text-primary);
+    }
+    .stat-value.r-lightning { color: var(--go-soft); }
+    .stat-value.r-sharp     { color: var(--signal); }
+    .stat-value.r-average   { color: var(--text-primary); }
+    .stat-value.r-sluggish  { color: var(--coral); }
+    .stat-value span {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: 3px;
     }
 
-    /* ── Result badge ─────────────────────────────────────────────── */
-    #result-badge {
-      display: inline-block;
-      font-family: var(--font-mono);
+    .evaluation {
+      margin: 4px 0 22px;
+      padding: 16px 18px;
+      text-align: left;
+      background: rgba(240, 238, 248, 0.03);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--text-muted);
+      border-radius: 12px;
+    }
+    .evaluation.r-lightning { border-left-color: var(--go-soft);    background: rgba( 93, 202, 165, 0.08); }
+    .evaluation.r-sharp     { border-left-color: var(--signal);     background: rgba(127, 119, 221, 0.08); }
+    .evaluation.r-average   { border-left-color: var(--text-muted); }
+    .evaluation.r-sluggish  { border-left-color: var(--coral);      background: rgba(216,  90,  48, 0.08); }
+
+    .eval-title {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      letter-spacing: 0.01em;
+    }
+    .eval-title.r-lightning { color: var(--go-soft); }
+    .eval-title.r-sharp     { color: var(--signal); }
+    .eval-title.r-average   { color: var(--text-primary); }
+    .eval-title.r-sluggish  { color: var(--coral); }
+    .eval-text {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+    .eval-detail {
+      font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+
+    .history {
+      list-style: none;
+      margin: 8px 0 28px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+    }
+    .history li {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      column-gap: 12px;
+      align-items: center;
+      padding: 9px 10px;
+      margin-bottom: 4px;
+      border-left: 3px solid var(--text-muted);
+      border-radius: 0 8px 8px 0;
+      background: rgba(240, 238, 248, 0.02);
+    }
+    .history li.r-lightning { border-left-color: var(--go-soft);    background: rgba( 93, 202, 165, 0.07); }
+    .history li.r-sharp     { border-left-color: var(--signal);     background: rgba(127, 119, 221, 0.07); }
+    .history li.r-average   { border-left-color: var(--text-muted); }
+    .history li.r-sluggish  { border-left-color: var(--coral);      background: rgba(216,  90,  48, 0.07); }
+
+    .history .round-name {
+      color: var(--text-muted);
       letter-spacing: 0.1em;
-      padding: 4px 14px;
-      border-radius: 100px;
-      background: rgba(29,158,117,0.13);
-      color: var(--go);
-      margin-bottom: 16px;
-      min-height: 22px;
-      opacity: 0;
-      transition: opacity 0.4s ease;
+      text-transform: uppercase;
+      font-size: 11px;
     }
-    #result-badge.visible { opacity: 1; }
-
-    /* ── Summary ──────────────────────────────────────────────────── */
-    #summary-block { display: none; text-align: left; margin-bottom: 22px; }
-    #summary-block.visible { display: block; }
-
-    .summary-stat {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      padding: 10px 0;
-      border-bottom: 1px solid rgba(240,238,248,0.06);
+    .history .time-value {
+      color: var(--text-primary);
+      font-weight: 500;
     }
-    .summary-stat .label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; }
-    .summary-stat .value { font-family: var(--font-mono); font-size: 15px; font-weight: 500; }
-    .summary-stat .value.highlight { color: var(--go); }
-
-    #round-history { margin-top: 14px; }
-    .history-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 6px 0; font-size: 13px;
+    .history .time-value small {
+      font-size: 0.7em;
+      color: var(--text-muted);
+      margin-left: 3px;
+      font-weight: 400;
     }
-    .history-row .r-label { color: var(--text-muted); }
-    .history-row .r-val   { font-family: var(--font-mono); }
+    .history li.r-lightning .time-value { color: var(--go-soft); }
+    .history li.r-sharp     .time-value { color: var(--signal); }
+    .history li.r-sluggish  .time-value { color: var(--coral); }
+    .history .rating-tag {
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(240, 238, 248, 0.06);
+      color: var(--text-muted);
+    }
+    .history li.r-lightning .rating-tag { background: rgba( 93, 202, 165, 0.18); color: var(--go-soft); }
+    .history li.r-sharp     .rating-tag { background: rgba(127, 119, 221, 0.18); color: var(--signal); }
+    .history li.r-sluggish  .rating-tag { background: rgba(216,  90,  48, 0.18); color: var(--coral); }
 
-    #rating-chip {
-      display: inline-block;
-      padding: 5px 14px;
-      border-radius: 100px;
-      font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+    .caption {
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
       margin-bottom: 18px;
     }
-    .chip-lightning { background: rgba(29,158,117,0.17);  color: #5DCAA5; }
-    .chip-sharp     { background: rgba(127,119,221,0.17); color: #AFA9EC; }
-    .chip-average   { background: rgba(240,238,248,0.07); color: var(--text-muted); }
-    .chip-sluggish  { background: rgba(216,90,48,0.13);  color: #F0997B; }
 
-    /* ── Keyboard hint ────────────────────────────────────────────── */
-    #kb-hint {
-      position: fixed; bottom: 20px; left: 50%;
-      transform: translateX(-50%);
-      font-size: 11px; color: rgba(136,135,128,0.38);
-      letter-spacing: 0.08em;
-      pointer-events: none; z-index: 10; white-space: nowrap;
+    .progress-track {
+      width: 100%;
+      max-width: 260px;
+      height: 2px;
+      margin: 0 auto;
+      background: rgba(240, 238, 248, 0.08);
+      border-radius: 1px;
+      overflow: hidden;
     }
-    @media (pointer: coarse) { #kb-hint { display: none; } }
+    .progress-fill {
+      height: 100%;
+      width: 100%;
+      background: var(--signal);
+      transform: scaleX(0);
+      transform-origin: left center;
+      animation: progress 1400ms linear forwards;
+    }
+    .progress-fill.coral { background: var(--coral); }
+    @keyframes progress {
+      from { transform: scaleX(0); }
+      to   { transform: scaleX(1); }
+    }
 
-    /* ── Shake ────────────────────────────────────────────────────── */
-    @keyframes shake {
-      0%,100% { transform: translateX(0); }
-      20%      { transform: translateX(-9px); }
-      40%      { transform: translateX(9px); }
-      60%      { transform: translateX(-6px); }
-      80%      { transform: translateX(6px); }
+    .dots::after {
+      content: '';
+      display: inline-block;
+      width: 1.2em;
+      text-align: left;
+      animation: dots 1.4s steps(4, end) infinite;
     }
-    .shake { animation: shake 0.4s ease; }
+    @keyframes dots {
+      0%   { content: ''; }
+      25%  { content: '.'; }
+      50%  { content: '..'; }
+      75%  { content: '...'; }
+      100% { content: ''; }
+    }
+
+    @media (max-width: 520px) {
+      #game-panel { padding: 28px 22px; border-radius: 14px; }
+      .title { font-size: 28px; }
+      .title.go { font-size: 76px; }
+      .result-time .ms { font-size: 60px; }
+      .stat-value { font-size: 22px; }
+    }
+    @media (max-height: 640px) {
+      .title.go { font-size: 72px; }
+      .history { max-height: 140px; overflow-y: auto; }
+    }
   </style>
 </head>
 <body>
-
-<div id="canvas-container"></div>
-
-<!-- Full-screen tap target for waiting + react states -->
-<div id="click-zone">
-  <div id="click-ring"></div>
-  <div id="tap-anywhere">Tap anywhere to react</div>
-</div>
-
-<div id="ui-layer">
-  <div id="game-panel">
-    <div id="round-track"></div>
-    <div id="result-badge"></div>
-    <div id="state-label">Reaction Timer</div>
-    <div id="main-heading">React.</div>
-    <div id="sub-text">Test your reflexes in 5 rounds.</div>
-    <div id="instructions"></div>
-    <div id="summary-block"></div>
-    <button id="cta-btn" class="variant-start" aria-label="Start game">Start</button>
+  <div id="canvas-container"></div>
+  <div id="ui-layer">
+    <div id="game-panel" data-state="idle">
+      <div id="panel-content"></div>
+    </div>
   </div>
-</div>
 
-<div id="kb-hint">Press <kbd>Space</kbd> to react</div>
+  <script type="module">
+    import * as THREE from 'three';
 
-<script type="module">
-import * as THREE from 'three';
+    /* ============================================================
+     * 1. CONSTANTS
+     * ============================================================ */
+    const TOTAL_ROUNDS   = 5;
+    const MIN_DELAY      = 1500;   // ms — minimum wait before GO
+    const MAX_DELAY      = 4000;   // ms — maximum wait before GO
+    const PARTICLE_COUNT = 420;
+    const PARTICLE_INNER = 1.5;    // min radius of initial sphere distribution
+    const PARTICLE_OUTER = 3.0;    // max radius
+    const BURST_SPEED    = 3.4;    // multiplier of base radius on react
+    const BURST_DURATION = 400;    // ms to complete burst
+    const LERP_FACTOR    = 0.08;   // per-frame interpolation for colors/scale (~300ms to converge)
+    const PARTICLE_LERP  = 0.07;   // per-frame for particle idle/settle
+    const RATING_THRESHOLDS = {
+      lightning: 200,
+      sharp:     300,
+      average:   450,
+    };
+    const STATE_COLORS = {
+      idle:          { geo: '#7F77DD', particle: '#534AB7', light: '#7F77DD' },
+      waiting:       { geo: '#534AB7', particle: '#3C3489', light: '#AFA9EC' },
+      react:         { geo: '#1D9E75', particle: '#5DCAA5', light: '#1D9E75' },
+      result:        { geo: '#1D9E75', particle: '#9FE1CB', light: '#0F6E56' },
+      'false-start': { geo: '#D85A30', particle: '#F0997B', light: '#D85A30' },
+      summary:       { geo: '#7F77DD', particle: '#AFA9EC', light: '#534AB7' },
+    };
+    const STATE_SCENE = {
+      idle:          { scale: 1.00, shell: 1.00, rotSpeed: 0.005, morph: 0.18, morphSpeed: 0.55, particleMode: 'idle',    pulse: false, shudder: false },
+      waiting:       { scale: 1.05, shell: 1.05, rotSpeed: 0.002, morph: 0.10, morphSpeed: 0.35, particleMode: 'idle',    pulse: true,  shudder: false },
+      react:         { scale: 1.30, shell: 1.55, rotSpeed: 0.024, morph: 0.45, morphSpeed: 1.80, particleMode: 'burst',   pulse: false, shudder: false },
+      result:        { scale: 1.00, shell: 1.00, rotSpeed: 0.010, morph: 0.22, morphSpeed: 0.80, particleMode: 'settle',  pulse: false, shudder: false },
+      'false-start': { scale: 0.95, shell: 0.65, rotSpeed: 0.026, morph: 0.55, morphSpeed: 2.40, particleMode: 'scatter', pulse: false, shudder: true  },
+      summary:       { scale: 0.55, shell: 0.40, rotSpeed: 0.003, morph: 0.08, morphSpeed: 0.25, particleMode: 'drift',   pulse: false, shudder: false },
+    };
+    const SATELLITE_COUNT       = 5;
+    const RESULT_AUTO_ADVANCE   = 1400;  // ms — result → next round / summary
+    const FALSESTART_RETRY_WAIT = 1800;  // ms — false-start → retry same round
 
-/* ═══════════════════════════════════════════════════════════════════
-   1. CONSTANTS
-═══════════════════════════════════════════════════════════════════ */
-const TOTAL_ROUNDS    = 5;
-const MIN_DELAY       = 1500;
-const MAX_DELAY       = 4000;
-const PARTICLE_COUNT  = 480;
-const BURST_SPEED     = 0.07;
-const DRIFT_SPEED     = 0.0035;
-const LERP_FACTOR     = 0.05;
+    /* ============================================================
+     * 2. THREE.JS SETUP — renderer, scene, camera, lights
+     * ============================================================ */
+    const canvasContainer = document.getElementById('canvas-container');
 
-const ROT_IDLE        = 0.0035;
-const ROT_WAITING     = 0.0018;
-const ROT_REACT       = 0.016;
-const ROT_RESULT      = 0.007;
-const ROT_FALSE_START = 0.022;
-const ROT_SUMMARY     = 0.0025;
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    // Cap pixel ratio at 2 — protects mobile GPUs from rendering at 3x cost
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x0D0D0F, 1);
+    canvasContainer.appendChild(renderer.domElement);
 
-const RATING_LIGHTNING = 200;
-const RATING_SHARP     = 300;
-const RATING_AVERAGE   = 450;
+    const scene = new THREE.Scene();
 
-// State color targets
-const STATE_COLORS = {
-  idle:          { mesh:'#7F77DD', particle:'#534AB7', light:'#7F77DD', light2:'#3C3489' },
-  waiting:       { mesh:'#534AB7', particle:'#3C3489', light:'#AFA9EC', light2:'#7F77DD' },
-  react:         { mesh:'#1D9E75', particle:'#5DCAA5', light:'#1D9E75', light2:'#0F6E56' },
-  result:        { mesh:'#1D9E75', particle:'#9FE1CB', light:'#0F6E56', light2:'#1D9E75' },
-  'false-start': { mesh:'#D85A30', particle:'#F0997B', light:'#D85A30', light2:'#8A2D0F' },
-  summary:       { mesh:'#7F77DD', particle:'#AFA9EC', light:'#534AB7', light2:'#7F77DD' },
-};
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      100
+    );
+    camera.position.set(0, 0, 5);
 
-/* ═══════════════════════════════════════════════════════════════════
-   2. THREE.JS SETUP
-═══════════════════════════════════════════════════════════════════ */
-const container = document.getElementById('canvas-container');
+    // Low ambient so the orbiting point light does most of the work — gives the
+    // icosahedron its directional shading and makes color shifts visible.
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+    scene.add(ambient);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x0D0D0F, 1);
-container.appendChild(renderer.domElement);
+    const pointLight = new THREE.PointLight(0x7F77DD, 60, 40, 1.5);
+    pointLight.position.set(3, 2, 4);
+    scene.add(pointLight);
 
-const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 0, 6.5);
+    /* ============================================================
+     * 3. GEOMETRY — layered: central knot + wireframe shell + satellites
+     * ============================================================ */
+    // Single parent group so the whole composition can scale/translate as a unit
+    const shapeGroup = new THREE.Group();
+    scene.add(shapeGroup);
 
-// ── Lights ──────────────────────────────────────────────────────
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.16);
-scene.add(ambientLight);
+    // Morphing core — a subdivided icosahedron whose vertices are displaced
+    // along their radial direction by a sin-fbm noise field every frame.
+    // The result reads as a living organic crystal that pulses with state.
+    const coreGeometry = new THREE.IcosahedronGeometry(0.85, 2);
+    const coreMaterial = new THREE.MeshStandardMaterial({
+      color:       new THREE.Color(STATE_COLORS.idle.geo),
+      roughness:   0.18,
+      metalness:   0.7,
+      flatShading: true,
+    });
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    shapeGroup.add(core);
 
-// Primary orbiting key light — sculpts the surfaces dramatically
-const keyLight = new THREE.PointLight(0x7F77DD, 6, 25);
-scene.add(keyLight);
-
-// Secondary fill from below for depth and colour richness
-const fillLight = new THREE.PointLight(0x3C3489, 3, 18);
-fillLight.position.set(0, -3.8, 1.5);
-scene.add(fillLight);
-
-/* ═══════════════════════════════════════════════════════════════════
-   3. CENTRAL GEOMETRY — Torus Knot (3,2)
-   A trefoil-like torus knot: mathematically elegant, continuously
-   interesting from every angle as it rotates. Far more dynamic than
-   a simple polyhedron. p=3, q=2 is the classic "overhand knot" form.
-═══════════════════════════════════════════════════════════════════ */
-const knotGeo = new THREE.TorusKnotGeometry(0.88, 0.30, 160, 20, 3, 2);
-const knotMat = new THREE.MeshStandardMaterial({
-  color:     0x7F77DD,
-  roughness: 0.10,
-  metalness: 0.85,
-});
-const knotMesh = new THREE.Mesh(knotGeo, knotMat);
-scene.add(knotMesh);
-
-/* ── Outer wireframe icosahedron shell ────────────────────────── */
-// Counter-rotates against the knot, creating a parallax cage effect.
-// Semi-transparent so the knot shows through.
-const icoGeo  = new THREE.IcosahedronGeometry(2.05, 1);
-const icoMat  = new THREE.MeshBasicMaterial({
-  color: 0x7F77DD, wireframe: true, transparent: true, opacity: 0.10,
-});
-const icoShell = new THREE.Mesh(icoGeo, icoMat);
-scene.add(icoShell);
-
-/* ── Ring of orbiting octahedra ───────────────────────────────── */
-// 6 small octahedra on a tilted orbit add spatial depth and motion
-// without cluttering the central focus shape.
-const ORBIT_COUNT  = 6;
-const orbitGroup   = new THREE.Group();
-scene.add(orbitGroup);
-orbitGroup.rotation.x = 0.42;
-orbitGroup.rotation.z = 0.18;
-
-const octaMeshes = [];
-const octaMats   = [];
-
-for (let i = 0; i < ORBIT_COUNT; i++) {
-  const g = new THREE.OctahedronGeometry(0.15, 0);
-  const m = new THREE.MeshStandardMaterial({
-    color: 0xAFA9EC, roughness: 0.15, metalness: 0.90,
-    transparent: true, opacity: 0.80,
-  });
-  const mesh = new THREE.Mesh(g, m);
-  const angle = (i / ORBIT_COUNT) * Math.PI * 2;
-  mesh.position.set(Math.cos(angle) * 2.4, Math.sin(angle) * 0.45, Math.sin(angle) * 2.1);
-  orbitGroup.add(mesh);
-  octaMeshes.push(mesh);
-  octaMats.push(m);
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   4. PARTICLE SYSTEM
-═══════════════════════════════════════════════════════════════════ */
-const positions     = new Float32Array(PARTICLE_COUNT * 3);
-const velocities    = new Float32Array(PARTICLE_COUNT * 3);
-const basePositions = new Float32Array(PARTICLE_COUNT * 3);
-const pColors       = new Float32Array(PARTICLE_COUNT * 3);
-
-for (let i = 0; i < PARTICLE_COUNT; i++) {
-  const r     = 2.1 + Math.random() * 2.8;
-  const theta = Math.random() * Math.PI * 2;
-  const phi   = Math.acos(2 * Math.random() - 1);
-  const x = r * Math.sin(phi) * Math.cos(theta);
-  const y = r * Math.sin(phi) * Math.sin(theta);
-  const z = r * Math.cos(phi);
-  positions[i*3] = basePositions[i*3] = x;
-  positions[i*3+1] = basePositions[i*3+1] = y;
-  positions[i*3+2] = basePositions[i*3+2] = z;
-  pColors[i*3]=0.33; pColors[i*3+1]=0.29; pColors[i*3+2]=0.72;
-}
-
-const partGeo = new THREE.BufferGeometry();
-partGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-partGeo.setAttribute('color',    new THREE.BufferAttribute(pColors, 3));
-
-const partMat = new THREE.PointsMaterial({
-  size: 0.038, vertexColors: true, transparent: true, opacity: 0.68,
-  sizeAttenuation: true, depthWrite: false,
-});
-const particleSystem = new THREE.Points(partGeo, partMat);
-scene.add(particleSystem);
-
-/* ═══════════════════════════════════════════════════════════════════
-   5. SCENE STATE TARGET
-═══════════════════════════════════════════════════════════════════ */
-let sceneTarget = {
-  meshColor:    new THREE.Color(0x7F77DD),
-  partColor:    new THREE.Color(0x534AB7),
-  lightColor:   new THREE.Color(0x7F77DD),
-  light2Color:  new THREE.Color(0x3C3489),
-  rotSpeed:     ROT_IDLE,
-  knotScale:    1.0,
-  shellOpacity: 0.10,
-  partMode:     'idle',
-};
-
-const _pColorWork  = new THREE.Color(0x534AB7);
-let burstProgress  = 0;
-let burstActive    = false;
-let currentScale   = 1.0;
-
-/* ═══════════════════════════════════════════════════════════════════
-   6. updateScene(state) — called by state machine only
-═══════════════════════════════════════════════════════════════════ */
-function updateScene(state) {
-  const c = STATE_COLORS[state];
-  sceneTarget.meshColor.set(c.mesh);
-  sceneTarget.partColor.set(c.particle);
-  sceneTarget.lightColor.set(c.light);
-  sceneTarget.light2Color.set(c.light2);
-
-  switch (state) {
-    case 'idle':
-      sceneTarget.rotSpeed    = ROT_IDLE;
-      sceneTarget.knotScale   = 1.0;
-      sceneTarget.shellOpacity= 0.10;
-      sceneTarget.partMode    = 'idle';
-      break;
-    case 'waiting':
-      sceneTarget.rotSpeed    = ROT_WAITING;
-      sceneTarget.knotScale   = 0.90;
-      sceneTarget.shellOpacity= 0.06;
-      sceneTarget.partMode    = 'idle';
-      break;
-    case 'react':
-      sceneTarget.rotSpeed    = ROT_REACT;
-      sceneTarget.knotScale   = 1.24;
-      sceneTarget.shellOpacity= 0.25;
-      sceneTarget.partMode    = 'burst';
-      burstActive = true; burstProgress = 0;
-      break;
-    case 'result':
-      sceneTarget.rotSpeed    = ROT_RESULT;
-      sceneTarget.knotScale   = 1.0;
-      sceneTarget.shellOpacity= 0.13;
-      sceneTarget.partMode    = 'settle';
-      break;
-    case 'false-start':
-      sceneTarget.rotSpeed    = ROT_FALSE_START;
-      sceneTarget.knotScale   = 0.80;
-      sceneTarget.shellOpacity= 0.07;
-      sceneTarget.partMode    = 'scatter';
-      burstActive = true; burstProgress = 0;
-      break;
-    case 'summary':
-      sceneTarget.rotSpeed    = ROT_SUMMARY;
-      sceneTarget.knotScale   = 0.76;
-      sceneTarget.shellOpacity= 0.05;
-      sceneTarget.partMode    = 'drift';
-      break;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   7. animate() — RAF loop; reads state, never sets game state
-═══════════════════════════════════════════════════════════════════ */
-let lightAngle = 0;
-
-function animate() {
-  requestAnimationFrame(animate);
-
-  const t = LERP_FACTOR;
-
-  // ── Torus knot rotation — all 3 axes for constant visual interest ──
-  knotMesh.rotation.x += sceneTarget.rotSpeed;
-  knotMesh.rotation.y += sceneTarget.rotSpeed * 0.65;
-  knotMesh.rotation.z += sceneTarget.rotSpeed * 0.40;
-
-  // ── Knot scale lerp ───────────────────────────────────────────
-  currentScale += (sceneTarget.knotScale - currentScale) * 0.075;
-  knotMesh.scale.setScalar(currentScale);
-
-  // ── Wireframe shell counter-rotates: parallax cage depth ──────
-  icoShell.rotation.x -= 0.0007;
-  icoShell.rotation.y -= 0.0011;
-  icoMat.opacity += (sceneTarget.shellOpacity - icoMat.opacity) * t;
-
-  // ── Orbiting octahedra ────────────────────────────────────────
-  orbitGroup.rotation.y += sceneTarget.rotSpeed * 0.55;
-  octaMeshes.forEach((m, i) => {
-    m.rotation.x += 0.018 + i * 0.003;
-    m.rotation.z += 0.013;
-    octaMats[i].color.lerp(sceneTarget.meshColor, t * 0.55);
-  });
-
-  // ── Colour lerps ──────────────────────────────────────────────
-  knotMat.color.lerp(sceneTarget.meshColor, t);
-  icoMat.color.lerp(sceneTarget.meshColor, t * 0.45);
-
-  // ── Light orbit ───────────────────────────────────────────────
-  lightAngle += 0.009;
-  keyLight.position.set(
-    Math.cos(lightAngle) * 4.2,
-    Math.sin(lightAngle * 0.65) * 2.2,
-    Math.sin(lightAngle) * 4.2
-  );
-  keyLight.color.lerp(sceneTarget.lightColor, t);
-  fillLight.color.lerp(sceneTarget.light2Color, t);
-
-  // ── Particle colour lerp ──────────────────────────────────────
-  _pColorWork.lerp(sceneTarget.partColor, t);
-  const pr = _pColorWork.r, pg = _pColorWork.g, pb = _pColorWork.b;
-  const colAttr = partGeo.attributes.color;
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    colAttr.array[i*3]   += (pr - colAttr.array[i*3])   * t;
-    colAttr.array[i*3+1] += (pg - colAttr.array[i*3+1]) * t;
-    colAttr.array[i*3+2] += (pb - colAttr.array[i*3+2]) * t;
-  }
-  colAttr.needsUpdate = true;
-
-  // ── Particle positions ────────────────────────────────────────
-  const posAttr = partGeo.attributes.position;
-
-  if (sceneTarget.partMode === 'idle') {
-    const now = performance.now() * 0.0004;
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const bx = basePositions[i*3], by = basePositions[i*3+1], bz = basePositions[i*3+2];
-      posAttr.array[i*3]   = bx + Math.sin(now + i*0.43) * 0.048;
-      posAttr.array[i*3+1] = by + Math.cos(now + i*0.57) * 0.048;
-      posAttr.array[i*3+2] = bz + Math.sin(now + i*0.39) * 0.048;
+    // Snapshot the pristine positions and unit normals once; morphing always
+    // displaces from this rest state so noise doesn't compound across frames.
+    const corePositionAttr = coreGeometry.attributes.position;
+    const coreBaseRadius   = 0.85;
+    const restPositions    = new Float32Array(corePositionAttr.array);
+    const restNormals      = new Float32Array(restPositions.length);
+    for (let i = 0; i < restPositions.length; i += 3) {
+      const x = restPositions[i], y = restPositions[i + 1], z = restPositions[i + 2];
+      const len = Math.sqrt(x * x + y * y + z * z) || 1;
+      restNormals[i]     = x / len;
+      restNormals[i + 1] = y / len;
+      restNormals[i + 2] = z / len;
     }
-  }
-  else if (sceneTarget.partMode === 'burst' && burstActive) {
-    burstProgress += BURST_SPEED;
-    if (burstProgress >= 1) { burstProgress = 1; burstActive = false; }
-    const ease = 1 - Math.pow(1 - burstProgress, 3); // cubic ease-out
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const bx = basePositions[i*3], by = basePositions[i*3+1], bz = basePositions[i*3+2];
-      const len = Math.sqrt(bx*bx + by*by + bz*bz) || 1;
-      posAttr.array[i*3]   = bx + (bx/len) * ease * 3.0;
-      posAttr.array[i*3+1] = by + (by/len) * ease * 3.0;
-      posAttr.array[i*3+2] = bz + (bz/len) * ease * 3.0;
+
+    // Cheap deterministic pseudo-noise: layered sines. Smooth, periodic, no
+    // texture lookup or imported noise lib — plenty for organic deformation.
+    function fbmNoise(x, y, z) {
+      return (
+        Math.sin(x * 1.8 + Math.cos(y * 1.4 + 0.7)) * 0.55 +
+        Math.cos(y * 2.1 + Math.sin(z * 1.6 + 1.3)) * 0.30 +
+        Math.sin(z * 2.7 + Math.cos(x * 1.1 + 2.1)) * 0.15
+      );
     }
-  }
-  else if (sceneTarget.partMode === 'settle') {
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      posAttr.array[i*3]   += (basePositions[i*3]   - posAttr.array[i*3])   * 0.048;
-      posAttr.array[i*3+1] += (basePositions[i*3+1] - posAttr.array[i*3+1]) * 0.048;
-      posAttr.array[i*3+2] += (basePositions[i*3+2] - posAttr.array[i*3+2]) * 0.048;
+
+    // Wireframe icosahedron shell — frames the knot at scale ~2, counter-rotates,
+    // and "breathes" with state (collapses on false-start, expands on react).
+    const shellGeometry = new THREE.IcosahedronGeometry(1.9, 1);
+    const shellMaterial = new THREE.MeshBasicMaterial({
+      color:       new THREE.Color(STATE_COLORS.idle.geo),
+      wireframe:   true,
+      transparent: true,
+      opacity:     0.18,
+    });
+    const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+    shapeGroup.add(shell);
+
+    // Orbiting octahedron satellites — each has its own orbit radius, speed,
+    // tilted plane, and self-spin axis so the motion never feels mechanical.
+    const satelliteGeometry = new THREE.OctahedronGeometry(0.13, 0);
+    const satellites = [];
+    for (let i = 0; i < SATELLITE_COUNT; i++) {
+      const mat = new THREE.MeshStandardMaterial({
+        color:       new THREE.Color(STATE_COLORS.idle.particle),
+        roughness:   0.25,
+        metalness:   0.7,
+        flatShading: true,
+      });
+      const sat = new THREE.Mesh(satelliteGeometry, mat);
+      sat.userData = {
+        radius:   1.55 + Math.random() * 0.6,
+        speed:    0.35 + Math.random() * 0.5,
+        phase:    Math.random() * Math.PI * 2,
+        tilt:     (Math.random() - 0.5) * 1.4,    // orbital-plane tilt (radians)
+        spinAxis: new THREE.Vector3(
+          Math.random() - 0.5,
+          Math.random() - 0.5,
+          Math.random() - 0.5
+        ).normalize(),
+        spinRate: 0.6 + Math.random() * 1.2,
+      };
+      satellites.push(sat);
+      shapeGroup.add(sat);
     }
-  }
-  else if (sceneTarget.partMode === 'scatter' && burstActive) {
-    burstProgress += BURST_SPEED * 1.4;
-    if (burstProgress >= 1) { burstProgress = 1; burstActive = false; }
-    const ease = 1 - Math.pow(1 - burstProgress, 2);
+
+    // Convenience array of every material whose color should follow the geometry palette
+    const geoMaterials = [coreMaterial, shellMaterial];
+    const satMaterials = satellites.map(s => s.material);
+
+    /* ============================================================
+     * 4. PARTICLE SYSTEM
+     * ============================================================ */
+    const particleGeo  = new THREE.BufferGeometry();
+    const basePositions = new Float32Array(PARTICLE_COUNT * 3);
+    const positions     = new Float32Array(PARTICLE_COUNT * 3);
+    const velocities    = new Float32Array(PARTICLE_COUNT * 3);
+    const phaseOffsets  = new Float32Array(PARTICLE_COUNT);
+
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const bx = basePositions[i*3], by = basePositions[i*3+1], bz = basePositions[i*3+2];
-      if (burstProgress < 0.03) {
-        velocities[i*3]   = (Math.random()-0.5)*5.5;
-        velocities[i*3+1] = (Math.random()-0.5)*5.5;
-        velocities[i*3+2] = (Math.random()-0.5)*5.5;
+      // Uniform distribution on a spherical shell (acos trick avoids polar clustering)
+      const theta = Math.random() * Math.PI * 2;
+      const phi   = Math.acos(2 * Math.random() - 1);
+      const r     = PARTICLE_INNER + Math.random() * (PARTICLE_OUTER - PARTICLE_INNER);
+      const x = r * Math.sin(phi) * Math.cos(theta);
+      const y = r * Math.sin(phi) * Math.sin(theta);
+      const z = r * Math.cos(phi);
+      basePositions[i * 3]     = x;
+      basePositions[i * 3 + 1] = y;
+      basePositions[i * 3 + 2] = z;
+      positions[i * 3]     = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+      phaseOffsets[i] = Math.random() * Math.PI * 2;
+    }
+
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const particleMaterial = new THREE.PointsMaterial({
+      color:           new THREE.Color(STATE_COLORS.idle.particle),
+      size:            0.045,
+      transparent:     true,
+      opacity:         0.85,
+      sizeAttenuation: true,
+      depthWrite:      false,
+    });
+    const particles = new THREE.Points(particleGeo, particleMaterial);
+    scene.add(particles);
+
+    /* ============================================================
+     * 5. SCENE STATE — what the animate loop is reaching toward
+     * ============================================================ */
+    const sceneTarget = {
+      geoColor:      new THREE.Color(STATE_COLORS.idle.geo),
+      particleColor: new THREE.Color(STATE_COLORS.idle.particle),
+      lightColor:    new THREE.Color(STATE_COLORS.idle.light),
+      groupScale:    STATE_SCENE.idle.scale,
+      shellScale:    STATE_SCENE.idle.shell,
+      rotationSpeed: STATE_SCENE.idle.rotSpeed,
+      morphAmount:   STATE_SCENE.idle.morph,
+      morphSpeed:    STATE_SCENE.idle.morphSpeed,
+      particleMode:  STATE_SCENE.idle.particleMode,
+      pulse:         STATE_SCENE.idle.pulse,
+      shudder:       STATE_SCENE.idle.shudder,
+      particleOpacity: 0.85,
+    };
+    let particleModeStart = performance.now();
+
+    /* ============================================================
+     * 6. updateScene(state) — single entry from game logic into Three.js
+     * ============================================================ */
+    function updateScene(state) {
+      const colors = STATE_COLORS[state];
+      const cfg    = STATE_SCENE[state];
+
+      sceneTarget.geoColor.set(colors.geo);
+      sceneTarget.particleColor.set(colors.particle);
+      sceneTarget.lightColor.set(colors.light);
+      sceneTarget.groupScale    = cfg.scale;
+      sceneTarget.shellScale    = cfg.shell;
+      sceneTarget.rotationSpeed = cfg.rotSpeed;
+      sceneTarget.morphAmount   = cfg.morph;
+      sceneTarget.morphSpeed    = cfg.morphSpeed;
+      sceneTarget.pulse         = cfg.pulse;
+      sceneTarget.shudder       = cfg.shudder;
+      sceneTarget.particleOpacity = state === 'react' ? 1.0 : 0.75;
+
+      // Particle mode changes are discrete — reset the mode clock and seed
+      // velocities for modes that integrate them.
+      if (cfg.particleMode !== sceneTarget.particleMode) {
+        sceneTarget.particleMode = cfg.particleMode;
+        particleModeStart = performance.now();
+
+        if (cfg.particleMode === 'scatter') {
+          // High random velocities — chaotic outward burst
+          for (let i = 0; i < PARTICLE_COUNT; i++) {
+            velocities[i * 3]     = (Math.random() - 0.5) * 6;
+            velocities[i * 3 + 1] = (Math.random() - 0.5) * 6;
+            velocities[i * 3 + 2] = (Math.random() - 0.5) * 6;
+          }
+        } else if (cfg.particleMode === 'drift') {
+          // Slow upward drift with slight horizontal wander
+          for (let i = 0; i < PARTICLE_COUNT; i++) {
+            velocities[i * 3]     = (Math.random() - 0.5) * 0.25;
+            velocities[i * 3 + 1] = 0.08 + Math.random() * 0.32;
+            velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.25;
+          }
+        }
       }
-      posAttr.array[i*3]   = bx + velocities[i*3]   * ease;
-      posAttr.array[i*3+1] = by + velocities[i*3+1] * ease;
-      posAttr.array[i*3+2] = bz + velocities[i*3+2] * ease;
     }
-  }
-  else if (sceneTarget.partMode === 'drift') {
-    const now = performance.now() * 0.0003;
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      posAttr.array[i*3]   += Math.sin(now + i*0.31) * 0.003;
-      posAttr.array[i*3+1] += DRIFT_SPEED;
-      if (posAttr.array[i*3+1] > 6.5) posAttr.array[i*3+1] = -6.5;
-      posAttr.array[i*3+2] += Math.cos(now + i*0.44) * 0.002;
+
+    /* ============================================================
+     * 7. animate() — RAF loop. Reads sceneTarget, never sets game state.
+     * ============================================================ */
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      const t  = clock.getElapsedTime();
+
+      // Color interpolation — knot + shell follow geometry palette; satellites
+      // and particle cloud follow the particle palette so they read as a swarm.
+      for (const m of geoMaterials) m.color.lerp(sceneTarget.geoColor, LERP_FACTOR);
+      for (const m of satMaterials) m.color.lerp(sceneTarget.particleColor, LERP_FACTOR);
+      particleMaterial.color.lerp(sceneTarget.particleColor, LERP_FACTOR);
+      pointLight.color.lerp(sceneTarget.lightColor, LERP_FACTOR);
+
+      // Group scale (with optional waiting-state pulse for "morph/pulse" feel)
+      let groupGoal = sceneTarget.groupScale;
+      if (sceneTarget.pulse) groupGoal += Math.sin(t * 2.4) * 0.08;
+      const gs = THREE.MathUtils.lerp(shapeGroup.scale.x, groupGoal, LERP_FACTOR);
+      shapeGroup.scale.set(gs, gs, gs);
+
+      // Wireframe shell scales independently within the group — collapses on
+      // false-start, expands on react, gives layered depth otherwise.
+      const ss = THREE.MathUtils.lerp(shell.scale.x, sceneTarget.shellScale, LERP_FACTOR);
+      shell.scale.set(ss, ss, ss);
+
+      // Shudder = false-start. Random jitter on the whole group, then recovers.
+      if (sceneTarget.shudder) {
+        shapeGroup.position.x = (Math.random() - 0.5) * 0.18;
+        shapeGroup.position.y = (Math.random() - 0.5) * 0.18;
+      } else {
+        shapeGroup.position.x = THREE.MathUtils.lerp(shapeGroup.position.x, 0, 0.2);
+        shapeGroup.position.y = THREE.MathUtils.lerp(shapeGroup.position.y, 0, 0.2);
+      }
+
+      // Core: spin on Y with a slight X drift…
+      core.rotation.y += sceneTarget.rotationSpeed * 1.4;
+      core.rotation.x += sceneTarget.rotationSpeed * 0.35;
+
+      // …and morph the surface. Each vertex is pushed/pulled along its rest
+      // normal by an fbm-noise field that scrolls through time at morphSpeed.
+      // morphAmount controls how dramatic the deformation gets per state.
+      const morph = THREE.MathUtils.lerp(
+        core.userData.currentMorph ?? sceneTarget.morphAmount,
+        sceneTarget.morphAmount,
+        LERP_FACTOR
+      );
+      const mspd = THREE.MathUtils.lerp(
+        core.userData.currentMorphSpeed ?? sceneTarget.morphSpeed,
+        sceneTarget.morphSpeed,
+        LERP_FACTOR
+      );
+      core.userData.currentMorph      = morph;
+      core.userData.currentMorphSpeed = mspd;
+
+      const arr = corePositionAttr.array;
+      const tm  = t * mspd;
+      for (let i = 0; i < arr.length; i += 3) {
+        const nx = restNormals[i],     ny = restNormals[i + 1], nz = restNormals[i + 2];
+        const rx = restPositions[i],   ry = restPositions[i + 1], rz = restPositions[i + 2];
+        const n  = fbmNoise(rx * 1.6 + tm, ry * 1.6 + tm * 0.8, rz * 1.6 + tm * 1.2);
+        const displ = coreBaseRadius * morph * n;
+        arr[i]     = rx + nx * displ;
+        arr[i + 1] = ry + ny * displ;
+        arr[i + 2] = rz + nz * displ;
+      }
+      corePositionAttr.needsUpdate = true;
+      coreGeometry.computeVertexNormals();
+
+      // Shell counter-rotates — opposite direction, slower — creates depth parallax
+      shell.rotation.y -= sceneTarget.rotationSpeed * 0.6;
+      shell.rotation.x -= sceneTarget.rotationSpeed * 0.3;
+
+      // Satellites: orbit around the origin on tilted planes, plus self-spin.
+      // Speed scales with the global rotation speed so they accelerate on react.
+      const speedScale = 1 + sceneTarget.rotationSpeed * 30; // 1.0 → ~1.8 across states
+      for (const sat of satellites) {
+        const d = sat.userData;
+        const angle = t * d.speed * speedScale + d.phase;
+        // Circle in XZ plane, then rotate that plane around the X axis by `tilt`
+        const cx = Math.cos(angle) * d.radius;
+        const cz = Math.sin(angle) * d.radius;
+        sat.position.set(
+          cx,
+          -cz * Math.sin(d.tilt),
+           cz * Math.cos(d.tilt)
+        );
+        sat.rotateOnAxis(d.spinAxis, d.spinRate * dt);
+      }
+
+      // Point light orbits on a slow elliptical path
+      pointLight.position.x = Math.cos(t * 0.45) * 4.2;
+      pointLight.position.z = Math.sin(t * 0.45) * 4.2;
+      pointLight.position.y = Math.sin(t * 0.3) * 2.2;
+
+      updateParticles(dt);
+
+      // Lerp particle opacity toward its state target
+      particleMaterial.opacity = THREE.MathUtils.lerp(
+        particleMaterial.opacity, sceneTarget.particleOpacity, LERP_FACTOR
+      );
+
+      renderer.render(scene, camera);
     }
-  }
 
-  posAttr.needsUpdate = true;
-  particleSystem.rotation.y += 0.0012;
+    function updateParticles(dt) {
+      const mode    = sceneTarget.particleMode;
+      const elapsed = (performance.now() - particleModeStart) / 1000;
 
-  renderer.render(scene, camera);
-}
+      if (mode === 'idle') {
+        // Gentle oscillation around base position. Lerping (not snapping)
+        // means we recover smoothly when coming back from any prior mode.
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const o = phaseOffsets[i];
+          const tx = basePositions[i * 3]     + Math.sin(elapsed * 0.6 + o) * 0.10;
+          const ty = basePositions[i * 3 + 1] + Math.cos(elapsed * 0.5 + o) * 0.10;
+          const tz = basePositions[i * 3 + 2] + Math.sin(elapsed * 0.4 + o) * 0.10;
+          positions[i * 3]     = THREE.MathUtils.lerp(positions[i * 3],     tx, PARTICLE_LERP);
+          positions[i * 3 + 1] = THREE.MathUtils.lerp(positions[i * 3 + 1], ty, PARTICLE_LERP);
+          positions[i * 3 + 2] = THREE.MathUtils.lerp(positions[i * 3 + 2], tz, PARTICLE_LERP);
+        }
+      } else if (mode === 'burst') {
+        // Each particle flies straight out along its base-vector. Linear
+        // progress over BURST_DURATION gives a clean, readable expansion.
+        const p = Math.min(elapsed * 1000 / BURST_DURATION, 1);
+        const factor = 1 + (BURST_SPEED - 1) * p;
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          positions[i * 3]     = basePositions[i * 3]     * factor;
+          positions[i * 3 + 1] = basePositions[i * 3 + 1] * factor;
+          positions[i * 3 + 2] = basePositions[i * 3 + 2] * factor;
+        }
+      } else if (mode === 'settle') {
+        // Lerp current → base. Works regardless of where particles were left.
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          positions[i * 3]     = THREE.MathUtils.lerp(positions[i * 3],     basePositions[i * 3],     0.05);
+          positions[i * 3 + 1] = THREE.MathUtils.lerp(positions[i * 3 + 1], basePositions[i * 3 + 1], 0.05);
+          positions[i * 3 + 2] = THREE.MathUtils.lerp(positions[i * 3 + 2], basePositions[i * 3 + 2], 0.05);
+        }
+      } else if (mode === 'scatter') {
+        // Integrate seeded velocities with mild damping
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          positions[i * 3]     += velocities[i * 3]     * dt;
+          positions[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+          positions[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+          velocities[i * 3]     *= 0.97;
+          velocities[i * 3 + 1] *= 0.97;
+          velocities[i * 3 + 2] *= 0.97;
+        }
+      } else if (mode === 'drift') {
+        // Rising-mist effect: gentle upward velocity with horizontal wander.
+        // When a particle rises above the visible cap, respawn it at the
+        // bottom of the volume on a random radius so the cloud never empties.
+        const RESET_Y   = 3.6;
+        const RESPAWN_Y = -3.2;
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          positions[i * 3]     += velocities[i * 3]     * dt;
+          positions[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+          positions[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+          if (positions[i * 3 + 1] > RESET_Y) {
+            const theta = Math.random() * Math.PI * 2;
+            const r     = PARTICLE_INNER + Math.random() * (PARTICLE_OUTER - PARTICLE_INNER);
+            positions[i * 3]     = Math.cos(theta) * r;
+            positions[i * 3 + 1] = RESPAWN_Y + Math.random() * 0.6;
+            positions[i * 3 + 2] = Math.sin(theta) * r;
+          }
+        }
+      }
 
-/* ═══════════════════════════════════════════════════════════════════
-   8. GAME STATE
-═══════════════════════════════════════════════════════════════════ */
-let gameState = {
-  phase:       'idle',
-  round:       0,
-  results:     [],
-  reactStart:  0,
-  waitTimeout: null,
-  lastResult:  null,
-};
+      particleGeo.attributes.position.needsUpdate = true;
+    }
 
-/* ═══════════════════════════════════════════════════════════════════
-   9. STATE MACHINE — setState drives everything
-═══════════════════════════════════════════════════════════════════ */
-const clickZone = document.getElementById('click-zone');
+    /* Resize handler — keep renderer + camera in sync with viewport */
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
 
-function updateClickZone(phase) {
-  clickZone.className = '';
-  if (phase === 'waiting') {
-    clickZone.classList.add('active', 'show-ring');
-  } else if (phase === 'react') {
-    clickZone.classList.add('active', 'react-ring');
-  } else if (phase === 'false-start') {
-    clickZone.classList.add('false-ring');
-  }
-}
+    /* ============================================================
+     * 8. GAME STATE
+     * ============================================================ */
+    const gameState = {
+      state:                'idle',
+      round:                0,    // 1..TOTAL_ROUNDS while playing
+      results:              [],   // ms per completed round
+      lastResult:           null,
+      waitingTimeoutId:     null,
+      reactStartTime:       null,
+      autoAdvanceTimeoutId: null, // timer that auto-leaves result / false-start
+    };
 
-function setState(newPhase, data = {}) {
-  if (gameState.waitTimeout) {
-    clearTimeout(gameState.waitTimeout);
-    gameState.waitTimeout = null;
-  }
-  gameState.phase = newPhase;
-  Object.assign(gameState, data);
-  updateScene(newPhase);
-  updateClickZone(newPhase);
-  render();
+    /* ============================================================
+     * 9. STATE MACHINE
+     * ============================================================ */
+    function setState(newState) {
+      // Cancel any pending auto-advance — the new state owns the future now
+      if (gameState.autoAdvanceTimeoutId !== null) {
+        clearTimeout(gameState.autoAdvanceTimeoutId);
+        gameState.autoAdvanceTimeoutId = null;
+      }
 
-  if (newPhase === 'result') {
-    setTimeout(() => {
-      if (gameState.results.length >= TOTAL_ROUNDS) {
+      gameState.state = newState;
+      updateScene(newState);
+      render();
+
+      // Auto-advance terminal-feedback states so the player isn't forced to click
+      if (newState === 'result') {
+        gameState.autoAdvanceTimeoutId = setTimeout(() => {
+          gameState.autoAdvanceTimeoutId = null;
+          nextRound();
+        }, RESULT_AUTO_ADVANCE);
+      } else if (newState === 'false-start') {
+        gameState.autoAdvanceTimeoutId = setTimeout(() => {
+          gameState.autoAdvanceTimeoutId = null;
+          startWaiting();
+        }, FALSESTART_RETRY_WAIT);
+      }
+    }
+
+    /* ============================================================
+     * 10. TIMING FUNCTIONS
+     * ============================================================ */
+    function startSession() {
+      gameState.results    = [];
+      gameState.round      = 1;
+      gameState.lastResult = null;
+      startWaiting();
+    }
+
+    function startWaiting() {
+      setState('waiting');
+      const delay = MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY);
+      gameState.waitingTimeoutId = setTimeout(triggerReact, delay);
+    }
+
+    function triggerReact() {
+      gameState.waitingTimeoutId = null;
+      gameState.reactStartTime = performance.now();
+      setState('react');
+    }
+
+    function recordResult() {
+      const elapsed = Math.round(performance.now() - gameState.reactStartTime);
+      gameState.lastResult = elapsed;
+      gameState.results.push(elapsed);
+      setState('result');
+    }
+
+    function handleFalseStart() {
+      if (gameState.waitingTimeoutId !== null) {
+        clearTimeout(gameState.waitingTimeoutId);
+        gameState.waitingTimeoutId = null;
+      }
+      gameState.lastResult = null;
+      setState('false-start');
+    }
+
+    function nextRound() {
+      if (gameState.round >= TOTAL_ROUNDS) {
         setState('summary');
       } else {
-        setState('waiting');
-        scheduleReact();
+        gameState.round += 1;
+        startWaiting();
       }
-    }, 1300);
-  }
-  else if (newPhase === 'false-start') {
-    setTimeout(() => {
-      if (gameState.round <= TOTAL_ROUNDS) {
-        setState('waiting');
-        scheduleReact();
-      }
-    }, 1600);
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   10. TIMING FUNCTIONS
-═══════════════════════════════════════════════════════════════════ */
-function scheduleReact() {
-  const delay = MIN_DELAY + (MAX_DELAY - MIN_DELAY) * Math.random();
-  gameState.waitTimeout = setTimeout(() => {
-    gameState.reactStart = performance.now();
-    setState('react');
-  }, delay);
-}
-
-function startGame() {
-  gameState.round      = 1;
-  gameState.results    = [];
-  gameState.lastResult = null;
-  setState('waiting');
-  scheduleReact();
-}
-
-function handleClick() {
-  const p = gameState.phase;
-  if      (p === 'idle' || p === 'summary') { startGame(); }
-  else if (p === 'waiting')  { setState('false-start'); }
-  else if (p === 'react') {
-    const elapsed = Math.round(performance.now() - gameState.reactStart);
-    gameState.results.push(elapsed);
-    gameState.round++;
-    setState('result', { lastResult: elapsed });
-  }
-  // result / false-start auto-advance; ignore extra clicks
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   11. UI RENDERING — reads game state, updates DOM only
-═══════════════════════════════════════════════════════════════════ */
-const panel        = document.getElementById('game-panel');
-const roundTrack   = document.getElementById('round-track');
-const stateLabel   = document.getElementById('state-label');
-const mainHeading  = document.getElementById('main-heading');
-const subText      = document.getElementById('sub-text');
-const instructions = document.getElementById('instructions');
-const summaryBlock = document.getElementById('summary-block');
-const ctaBtn       = document.getElementById('cta-btn');
-const resultBadge  = document.getElementById('result-badge');
-
-function buildRoundTrack() {
-  roundTrack.innerHTML = '';
-  for (let i = 1; i <= TOTAL_ROUNDS; i++) {
-    const pip = document.createElement('div');
-    pip.className = 'pip';
-    const isDone   = i < gameState.round && gameState.phase !== 'idle' && gameState.phase !== 'summary';
-    const isActive = i === gameState.round && gameState.phase === 'react';
-    if (isDone)   pip.classList.add('done');
-    if (isActive) pip.classList.add('active');
-    roundTrack.appendChild(pip);
-  }
-}
-
-function getRating(avg) {
-  if (avg < RATING_LIGHTNING) return { label: 'Lightning', cls: 'chip-lightning' };
-  if (avg < RATING_SHARP)     return { label: 'Sharp',     cls: 'chip-sharp'     };
-  if (avg < RATING_AVERAGE)   return { label: 'Average',   cls: 'chip-average'   };
-  return                             { label: 'Sluggish',   cls: 'chip-sluggish'  };
-}
-
-function render() {
-  const p = gameState.phase;
-  panel.className = `state-${p}`;
-  buildRoundTrack();
-
-  // Result badge
-  if (p === 'result' && gameState.lastResult != null) {
-    resultBadge.textContent = `Round ${gameState.results.length} · ${gameState.lastResult} ms`;
-    resultBadge.classList.add('visible');
-  } else {
-    resultBadge.classList.remove('visible');
-  }
-
-  instructions.innerHTML = '';
-  instructions.classList.remove('visible');
-  summaryBlock.classList.remove('visible');
-  summaryBlock.innerHTML = '';
-
-  switch (p) {
-
-    case 'idle':
-      stateLabel.textContent  = 'Reaction Timer';
-      mainHeading.textContent = 'React.';
-      mainHeading.className   = '';
-      mainHeading.style.color = '';
-      subText.textContent     = 'How fast are your reflexes?';
-
-      instructions.classList.add('visible');
-      instructions.innerHTML = `
-        <div class="instr-row">
-          <div class="instr-num">1</div>
-          <div class="instr-text">
-            Press <strong>Start</strong>. A random delay of 1.5–4 seconds begins.
-          </div>
-        </div>
-        <div class="instr-row">
-          <div class="instr-num">2</div>
-          <div class="instr-text">
-            When it flashes <strong>teal</strong> and shows <strong>GO!</strong> — click, tap, or hit <strong>Space</strong> as fast as possible.
-          </div>
-        </div>
-        <div class="instr-row">
-          <div class="instr-num">3</div>
-          <div class="instr-text">
-            <strong>Don't click early</strong> — clicking before GO is a false start, and the round restarts.
-          </div>
-        </div>
-        <div class="instr-row">
-          <div class="instr-num">4</div>
-          <div class="instr-text">
-            5 rounds total. See your average, best, and rating at the end.
-          </div>
-        </div>
-      `;
-
-      ctaBtn.className   = 'variant-start';
-      ctaBtn.textContent = 'Start';
-      break;
-
-    case 'waiting':
-      stateLabel.textContent  = `Round ${gameState.round} of ${TOTAL_ROUNDS}`;
-      mainHeading.textContent = 'Get ready…';
-      mainHeading.className   = '';
-      mainHeading.style.color = '';
-      subText.textContent     = 'Watch for GO — click anywhere.';
-      ctaBtn.className        = 'hidden';
-      break;
-
-    case 'react':
-      stateLabel.textContent  = `Round ${gameState.round} of ${TOTAL_ROUNDS}`;
-      mainHeading.textContent = 'GO!';
-      mainHeading.className   = '';
-      mainHeading.style.color = 'var(--go)';
-      subText.textContent     = 'Tap anywhere now!';
-      ctaBtn.className        = 'hidden';
-      break;
-
-    case 'result': {
-      const ms = gameState.lastResult;
-      stateLabel.textContent  = `Round ${gameState.results.length} complete`;
-      mainHeading.textContent = `${ms} ms`;
-      mainHeading.className   = 'mono';
-      mainHeading.style.color = '';
-      subText.textContent     = ms < RATING_LIGHTNING ? '⚡ Incredible reflexes!'
-                              : ms < RATING_SHARP     ? '✓ Sharp!'
-                              : ms < RATING_AVERAGE   ? 'Decent — keep going.'
-                              : 'Bit slow. Try again!';
-      ctaBtn.className        = 'hidden';
-      break;
     }
 
-    case 'false-start':
-      stateLabel.textContent  = `Round ${gameState.round} of ${TOTAL_ROUNDS}`;
-      mainHeading.textContent = 'Too early!';
-      mainHeading.className   = '';
-      mainHeading.style.color = 'var(--false-start)';
-      subText.textContent     = 'Wait for GO — round will restart.';
-      ctaBtn.className        = 'hidden';
-      panel.classList.remove('shake');
-      void panel.offsetWidth; // force reflow to restart animation
-      panel.classList.add('shake');
-      break;
+    /* ============================================================
+     * 11. UI RENDERING — DOM only, reads gameState
+     * ============================================================ */
+    const panel        = document.getElementById('game-panel');
+    const panelContent = document.getElementById('panel-content');
 
-    case 'summary': {
-      const res   = gameState.results;
-      const avg   = Math.round(res.reduce((a,b)=>a+b,0) / res.length);
-      const best  = Math.min(...res);
-      const worst = Math.max(...res);
-      const { label, cls } = getRating(avg);
-
-      stateLabel.textContent  = 'Session complete';
-      mainHeading.textContent = 'Results';
-      mainHeading.className   = '';
-      mainHeading.style.color = '';
-      subText.textContent     = '';
-
-      summaryBlock.classList.add('visible');
-      summaryBlock.innerHTML = `
-        <div id="rating-chip" class="${cls}">${label}</div>
-        <div class="summary-stat">
-          <span class="label">AVERAGE</span>
-          <span class="value highlight">${avg} ms</span>
-        </div>
-        <div class="summary-stat">
-          <span class="label">BEST</span>
-          <span class="value">${best} ms</span>
-        </div>
-        <div class="summary-stat">
-          <span class="label">WORST</span>
-          <span class="value">${worst} ms</span>
-        </div>
-        <div id="round-history">
-          ${res.map((ms,i)=>`
-            <div class="history-row">
-              <span class="r-label">Round ${i+1}</span>
-              <span class="r-val">${ms} ms</span>
-            </div>`).join('')}
-        </div>
-      `;
-      ctaBtn.className   = 'variant-again';
-      ctaBtn.textContent = 'Play again';
-      break;
+    function ratingLabel(ms) {
+      if (ms < RATING_THRESHOLDS.lightning) return 'Lightning';
+      if (ms < RATING_THRESHOLDS.sharp)     return 'Sharp';
+      if (ms < RATING_THRESHOLDS.average)   return 'Average';
+      return 'Sluggish';
     }
-  }
-}
+    function ratingClass(ms) {
+      if (ms < RATING_THRESHOLDS.lightning) return 'r-lightning';
+      if (ms < RATING_THRESHOLDS.sharp)     return 'r-sharp';
+      if (ms < RATING_THRESHOLDS.average)   return 'r-average';
+      return 'r-sluggish';
+    }
 
-/* ═══════════════════════════════════════════════════════════════════
-   12. EVENT LISTENERS — call state machine only
-═══════════════════════════════════════════════════════════════════ */
-// Panel: handles idle + summary (has Start / Play again button)
-panel.addEventListener('click', (e) => { e.stopPropagation(); handleClick(); });
-ctaBtn.addEventListener('click', (e) => { e.stopPropagation(); handleClick(); });
+    function consistencyLabel(spread) {
+      if (spread < 60)  return 'razor-tight';
+      if (spread < 120) return 'tight';
+      if (spread < 200) return 'steady';
+      if (spread < 300) return 'variable';
+      return 'scattered';
+    }
 
-// Full-screen zone: handles waiting + react states
-clickZone.addEventListener('click', () => { handleClick(); });
+    // Returns the verdict block for the summary — a rating title, an
+    // explanation paragraph, and a one-line stats detail.
+    function evaluationFor(avg, best, worst) {
+      const spread = worst - best;
+      let title, text;
+      if (avg < RATING_THRESHOLDS.lightning) {
+        title = 'Lightning fast';
+        text  = `Reaction times under ${RATING_THRESHOLDS.lightning}ms are exceptional — you're operating near the limits of human visual processing. This is competitive-esports territory and well below the ~250ms adult average.`;
+      } else if (avg < RATING_THRESHOLDS.sharp) {
+        title = 'Sharp instincts';
+        text  = `Comfortably faster than the ~250ms adult average. You're alert, focused, and quick to respond to visual cues — the range trained gamers and athletes tend to land in.`;
+      } else if (avg < RATING_THRESHOLDS.average) {
+        title = 'Right on pace';
+        text  = `Your reactions sit within the typical human range. Most adults score 280–350ms on visual reaction tasks like this one — perfectly normal, with room to sharpen.`;
+      } else {
+        title = 'Take it slow';
+        text  = `Your times are above the typical range. Fatigue, distraction, or hesitating instead of reacting can all push latency up — try again when fully focused for a cleaner read.`;
+      }
+      const detail = `Spread ${spread}ms · ${consistencyLabel(spread)} consistency · human visual baseline ~250ms`;
+      return { title, text, detail };
+    }
 
-// Keyboard
-document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' || e.code === 'Enter') {
-    e.preventDefault();
-    handleClick();
-  }
-});
+    function render() {
+      const s = gameState.state;
+      panel.dataset.state = s;
 
-// Resize
-window.addEventListener('resize', () => {
-  const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-});
+      if (s === 'idle') {
+        panelContent.innerHTML = `
+          <p class="eyebrow">Reaction Timer</p>
+          <h1 class="title">React. <span class="title-accent">How fast are you?</span></h1>
+          <p class="subtitle">${TOTAL_ROUNDS} rounds. Click the moment you see <strong>GO</strong>.</p>
+          <div class="hint">Click anywhere · Spacebar</div>
+          <div><button class="btn" type="button">Start</button></div>
+        `;
+      } else if (s === 'waiting') {
+        panelContent.innerHTML = `
+          <p class="round-indicator">ROUND ${gameState.round} / ${TOTAL_ROUNDS}</p>
+          <h1 class="title">Get ready<span class="dots"></span></h1>
+          <p class="subtitle">Wait for GO — don't click yet.</p>
+        `;
+      } else if (s === 'react') {
+        panelContent.innerHTML = `
+          <h1 class="title go">GO!</h1>
+        `;
+      } else if (s === 'result') {
+        const ms     = gameState.lastResult;
+        const isLast = gameState.round >= TOTAL_ROUNDS;
+        panelContent.innerHTML = `
+          <p class="round-indicator">ROUND ${gameState.round} / ${TOTAL_ROUNDS}</p>
+          <p class="result-time"><span class="ms">${ms}</span><span class="unit">ms</span></p>
+          <p class="rating ${ratingClass(ms)}">${ratingLabel(ms)}</p>
+          <p class="caption">${isLast ? 'Summary in a moment…' : 'Next round in a moment…'}</p>
+          <div class="progress-track"><div class="progress-fill" style="animation-duration:${RESULT_AUTO_ADVANCE}ms"></div></div>
+        `;
+      } else if (s === 'false-start') {
+        panelContent.innerHTML = `
+          <p class="round-indicator">ROUND ${gameState.round} / ${TOTAL_ROUNDS}</p>
+          <h1 class="title coral">Too early!</h1>
+          <p class="subtitle">Wait for GO before clicking. Retrying this round…</p>
+          <div class="progress-track"><div class="progress-fill coral" style="animation-duration:${FALSESTART_RETRY_WAIT}ms"></div></div>
+        `;
+      } else if (s === 'summary') {
+        const results = gameState.results;
+        const avg     = Math.round(results.reduce((a, b) => a + b, 0) / results.length);
+        const best    = Math.min(...results);
+        const worst   = Math.max(...results);
+        const ev      = evaluationFor(avg, best, worst);
+        const evClass = ratingClass(avg);
+        panelContent.innerHTML = `
+          <p class="eyebrow">Session complete</p>
+          <div class="stats-grid">
+            <div class="stat ${ratingClass(best)}">
+              <div class="stat-label">Best</div>
+              <div class="stat-value ${ratingClass(best)}">${best}<span>ms</span></div>
+            </div>
+            <div class="stat ${ratingClass(avg)}">
+              <div class="stat-label">Average</div>
+              <div class="stat-value ${ratingClass(avg)}">${avg}<span>ms</span></div>
+            </div>
+            <div class="stat ${ratingClass(worst)}">
+              <div class="stat-label">Worst</div>
+              <div class="stat-value ${ratingClass(worst)}">${worst}<span>ms</span></div>
+            </div>
+          </div>
+          <div class="evaluation ${evClass}">
+            <h3 class="eval-title ${evClass}">${ev.title}</h3>
+            <p class="eval-text">${ev.text}</p>
+            <p class="eval-detail">${ev.detail}</p>
+          </div>
+          <ol class="history">
+            ${results.map((r, i) => `
+              <li class="${ratingClass(r)}">
+                <span class="round-name">Round ${i + 1}</span>
+                <span class="time-value">${r}<small>ms</small></span>
+                <span class="rating-tag">${ratingLabel(r)}</span>
+              </li>
+            `).join('')}
+          </ol>
+          <div><button class="btn" type="button">Play again</button></div>
+        `;
+      }
+    }
 
-/* ═══════════════════════════════════════════════════════════════════
-   13. INIT
-═══════════════════════════════════════════════════════════════════ */
-function init() {
-  updateScene('idle');
-  updateClickZone('idle');
-  render();
-  animate();
-}
+    /* ============================================================
+     * 12. EVENT LISTENERS — entire viewport is a single click zone
+     * ============================================================ */
+    function handleAction() {
+      switch (gameState.state) {
+        case 'idle':
+          startSession();
+          break;
+        case 'waiting':
+          handleFalseStart();
+          break;
+        case 'react':
+          recordResult();
+          break;
+        case 'result':
+          nextRound();
+          break;
+        case 'false-start':
+          // Retry current round — round number stays the same
+          startWaiting();
+          break;
+        case 'summary':
+          startSession();
+          break;
+      }
+    }
 
-init();
-</script>
+    // pointerdown beats click by ~50–100ms and works for touch + mouse
+    // uniformly — critical for honest reaction timing.
+    document.addEventListener('pointerdown', handleAction);
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.code === 'Space' || e.key === ' ') && !e.repeat) {
+        e.preventDefault();
+        handleAction();
+      }
+    });
+
+    // Stop spacebar from also "clicking" a focused button (would double-fire)
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' && document.activeElement instanceof HTMLButtonElement) {
+        document.activeElement.blur();
+      }
+    });
+
+    /* ============================================================
+     * 13. INIT
+     * ============================================================ */
+    function init() {
+      setState('idle');
+      animate();
+    }
+    init();
+  </script>
 </body>
 </html>
