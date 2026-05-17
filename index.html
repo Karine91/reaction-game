@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reaction Timer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --void:        #0D0D0F;
+      --surface:     #141417;
+      --signal:      #7F77DD;
+      --go:          #1D9E75;
+      --false-start: #D85A30;
+      --text-primary:#F0EEF8;
+      --text-muted:  #888780;
+      --font-ui:     'DM Sans', sans-serif;
+      --font-mono:   'JetBrains Mono', monospace;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--void);
+      color: var(--text-primary);
+      font-family: var(--font-ui);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ── Canvas container ─────────────────────────────────────────── */
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* ── UI Layer ─────────────────────────────────────────────────── */
+    #ui-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Game Panel ───────────────────────────────────────────────── */
+    #game-panel {
+      pointer-events: auto;
+      background: rgba(13, 13, 15, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(240, 238, 248, 0.08);
+      border-radius: 20px;
+      padding: 48px 40px;
+      width: min(440px, calc(100vw - 32px));
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.3s ease;
+    }
+
+    /* React state: nearly transparent panel — Three.js burst IS the visual */
+    #game-panel.state-react {
+      background: rgba(13, 13, 15, 0.25);
+      border-color: rgba(29, 158, 117, 0.3);
+    }
+
+    #game-panel.state-false-start {
+      border-color: rgba(216, 90, 48, 0.4);
+    }
+
+    /* ── Round pip track ──────────────────────────────────────────── */
+    #round-track {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+
+    .pip {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(240, 238, 248, 0.15);
+      transition: background 0.35s ease, transform 0.35s ease;
+    }
+
+    .pip.done   { background: var(--signal); }
+    .pip.active { background: var(--go); transform: scale(1.35); }
+
+    /* ── State label ──────────────────────────────────────────────── */
+    #state-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      min-height: 16px;
+      transition: color 0.3s ease;
+    }
+
+    /* ── Main heading ─────────────────────────────────────────────── */
+    #main-heading {
+      font-size: clamp(28px, 6vw, 48px);
+      font-weight: 500;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 10px;
+      transition: color 0.3s ease;
+    }
+
+    #main-heading.mono {
+      font-family: var(--font-mono);
+      font-size: clamp(40px, 10vw, 72px);
+      letter-spacing: -0.03em;
+    }
+
+    /* ── Sub text ─────────────────────────────────────────────────── */
+    #sub-text {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      min-height: 20px;
+      margin-bottom: 28px;
+      transition: opacity 0.3s ease;
+    }
+
+    /* ── CTA Button ───────────────────────────────────────────────── */
+    #cta-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 140px;
+      min-height: 48px;
+      padding: 14px 32px;
+      border-radius: 100px;
+      border: none;
+      font-family: var(--font-ui);
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease, background 0.3s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #cta-btn:hover  { transform: scale(1.04); }
+    #cta-btn:active { transform: scale(0.97); }
+    #cta-btn.hidden { display: none; }
+
+    #cta-btn.variant-start {
+      background: var(--signal);
+      color: #fff;
+    }
+
+    #cta-btn.variant-next {
+      background: rgba(240,238,248,0.1);
+      color: var(--text-primary);
+      border: 1px solid rgba(240,238,248,0.15);
+    }
+
+    #cta-btn.variant-again {
+      background: var(--go);
+      color: #fff;
+    }
+
+    /* ── Result line ──────────────────────────────────────────────── */
+    #result-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      padding: 4px 12px;
+      border-radius: 100px;
+      background: rgba(29,158,117,0.15);
+      color: var(--go);
+      margin-bottom: 20px;
+      min-height: 22px;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+
+    #result-badge.visible { opacity: 1; }
+
+    /* ── Summary screen ───────────────────────────────────────────── */
+    #summary-block {
+      display: none;
+      text-align: left;
+      margin-bottom: 28px;
+    }
+
+    #summary-block.visible { display: block; }
+
+    .summary-stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(240,238,248,0.06);
+    }
+
+    .summary-stat:last-child { border-bottom: none; }
+
+    .summary-stat .label {
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    .summary-stat .value {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .summary-stat .value.highlight { color: var(--go); }
+
+    #round-history {
+      margin-top: 16px;
+      margin-bottom: 4px;
+    }
+
+    .history-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      font-size: 13px;
+    }
+
+    .history-row .r-label { color: var(--text-muted); }
+    .history-row .r-val   { font-family: var(--font-mono); font-size: 13px; }
+
+    #rating-chip {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    .chip-lightning { background: rgba(29,158,117,0.2);  color: #5DCAA5; }
+    .chip-sharp     { background: rgba(127,119,221,0.2); color: #AFA9EC; }
+    .chip-average   { background: rgba(240,238,248,0.08);color: var(--text-muted); }
+    .chip-sluggish  { background: rgba(216,90,48,0.15);  color: #F0997B; }
+
+    /* ── Keyboard hint ────────────────────────────────────────────── */
+    #kb-hint {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: rgba(136,135,128,0.5);
+      letter-spacing: 0.08em;
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+    }
+
+    @media (pointer: coarse) { #kb-hint { display: none; } }
+
+    /* ── Shake animation for false-start ─────────────────────────── */
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%      { transform: translateX(-8px); }
+      40%      { transform: translateX(8px); }
+      60%      { transform: translateX(-6px); }
+      80%      { transform: translateX(6px); }
+    }
+
+    .shake { animation: shake 0.4s ease; }
+  </style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<div id="ui-layer">
+  <div id="game-panel">
+    <div id="round-track"></div>
+    <div id="result-badge"></div>
+    <div id="state-label">Reaction Timer</div>
+    <div id="main-heading">React.</div>
+    <div id="sub-text">How fast are you?</div>
+    <div id="summary-block"></div>
+    <button id="cta-btn" class="variant-start" aria-label="Start game">Start</button>
+  </div>
+</div>
+
+<div id="kb-hint">Press <kbd>Space</kbd> to react</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ═══════════════════════════════════════════════════════════════════
+   1. CONSTANTS
+═══════════════════════════════════════════════════════════════════ */
+const TOTAL_ROUNDS    = 5;
+const MIN_DELAY       = 1500;    // ms
+const MAX_DELAY       = 4000;    // ms
+const PARTICLE_COUNT  = 420;
+const BURST_SPEED     = 0.08;
+const DRIFT_SPEED     = 0.004;
+const LERP_FACTOR     = 0.055;   // color interpolation per frame
+const ROT_IDLE        = 0.004;
+const ROT_WAITING     = 0.002;
+const ROT_REACT       = 0.012;
+const ROT_RESULT      = 0.006;
+const ROT_FALSE_START = 0.018;
+const ROT_SUMMARY     = 0.003;
+
+const RATING_LIGHTNING = 200;
+const RATING_SHARP     = 300;
+const RATING_AVERAGE   = 450;
+
+// State color targets  [mesh hex, particle hex, light hex]
+const STATE_COLORS = {
+  idle:        { mesh: '#7F77DD', particle: '#534AB7', light: '#7F77DD' },
+  waiting:     { mesh: '#534AB7', particle: '#3C3489', light: '#AFA9EC' },
+  react:       { mesh: '#1D9E75', particle: '#5DCAA5', light: '#1D9E75' },
+  result:      { mesh: '#1D9E75', particle: '#9FE1CB', light: '#0F6E56' },
+  'false-start':{ mesh: '#D85A30', particle: '#F0997B', light: '#D85A30' },
+  summary:     { mesh: '#7F77DD', particle: '#AFA9EC', light: '#534AB7' },
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   2. THREE.JS SETUP
+═══════════════════════════════════════════════════════════════════ */
+const container = document.getElementById('canvas-container');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x0D0D0F, 1);
+container.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 5);
+
+// Lights
+// Ambient keeps the dark side visible but subtle
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.25);
+scene.add(ambientLight);
+
+// Point light that orbits the icosahedron — gives it life
+const pointLight = new THREE.PointLight(0x7F77DD, 3.5, 20);
+scene.add(pointLight);
+
+// Secondary fill light from below for depth
+const fillLight = new THREE.PointLight(0x141417, 1.2, 15);
+fillLight.position.set(0, -3, 2);
+scene.add(fillLight);
+
+/* ═══════════════════════════════════════════════════════════════════
+   3. ICOSAHEDRON GEOMETRY
+═══════════════════════════════════════════════════════════════════ */
+// detail=1 gives a nice faceted-but-smooth look, perfect for metallic shading
+const icoGeo = new THREE.IcosahedronGeometry(1, 1);
+const icoMat = new THREE.MeshStandardMaterial({
+  color:     0x7F77DD,
+  roughness: 0.18,
+  metalness: 0.72,
+  wireframe: false,
+});
+const icoMesh = new THREE.Mesh(icoGeo, icoMat);
+scene.add(icoMesh);
+
+// Working colors for lerp (avoids creating new THREE.Color every frame)
+const _meshColor    = new THREE.Color(0x7F77DD);
+const _particleColor= new THREE.Color(0x534AB7);
+const _lightColor   = new THREE.Color(0x7F77DD);
+
+/* ═══════════════════════════════════════════════════════════════════
+   4. PARTICLE SYSTEM
+═══════════════════════════════════════════════════════════════════ */
+const positions    = new Float32Array(PARTICLE_COUNT * 3);
+const velocities   = new Float32Array(PARTICLE_COUNT * 3); // per-particle velocity
+const basePositions= new Float32Array(PARTICLE_COUNT * 3); // idle/drift target
+const colors       = new Float32Array(PARTICLE_COUNT * 3);
+
+// Distribute particles in a sphere shell around the icosahedron
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  const r     = 1.6 + Math.random() * 2.2;
+  const theta = Math.random() * Math.PI * 2;
+  const phi   = Math.acos(2 * Math.random() - 1);
+  const x     = r * Math.sin(phi) * Math.cos(theta);
+  const y     = r * Math.sin(phi) * Math.sin(theta);
+  const z     = r * Math.cos(phi);
+  positions[i*3]   = basePositions[i*3]   = x;
+  positions[i*3+1] = basePositions[i*3+1] = y;
+  positions[i*3+2] = basePositions[i*3+2] = z;
+  colors[i*3]=0.33; colors[i*3+1]=0.29; colors[i*3+2]=0.72;
+}
+
+const partGeo  = new THREE.BufferGeometry();
+partGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+partGeo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+
+const partMat  = new THREE.PointsMaterial({
+  size:           0.045,
+  vertexColors:   true,
+  transparent:    true,
+  opacity:        0.75,
+  sizeAttenuation:true,
+  depthWrite:     false,
+});
+
+const particles = new THREE.Points(partGeo, partMat);
+scene.add(particles);
+
+/* ═══════════════════════════════════════════════════════════════════
+   5. SCENE STATE — sceneTarget drives all Three.js transitions
+═══════════════════════════════════════════════════════════════════ */
+let sceneTarget = {
+  meshColor:     new THREE.Color(0x7F77DD),
+  particleColor: new THREE.Color(0x534AB7),
+  lightColor:    new THREE.Color(0x7F77DD),
+  rotSpeed:      ROT_IDLE,
+  scale:         1.0,
+  particleMode:  'idle',   // idle | burst | scatter | drift
+  lightAngle:    0,
+};
+
+let burstProgress  = 0; // 0→1 over burst animation
+let burstActive    = false;
+
+/* ═══════════════════════════════════════════════════════════════════
+   6. updateScene(state) — called by state machine ONLY
+═══════════════════════════════════════════════════════════════════ */
+function updateScene(state) {
+  const c = STATE_COLORS[state];
+  sceneTarget.meshColor.set(c.mesh);
+  sceneTarget.particleColor.set(c.particle);
+  sceneTarget.lightColor.set(c.light);
+
+  switch (state) {
+    case 'idle':
+      sceneTarget.rotSpeed    = ROT_IDLE;
+      sceneTarget.scale       = 1.0;
+      sceneTarget.particleMode= 'idle';
+      break;
+    case 'waiting':
+      sceneTarget.rotSpeed    = ROT_WAITING;
+      sceneTarget.scale       = 0.92;
+      sceneTarget.particleMode= 'idle';
+      break;
+    case 'react':
+      sceneTarget.rotSpeed    = ROT_REACT;
+      sceneTarget.scale       = 1.18;
+      sceneTarget.particleMode= 'burst';
+      burstActive = true;
+      burstProgress = 0;
+      break;
+    case 'result':
+      sceneTarget.rotSpeed    = ROT_RESULT;
+      sceneTarget.scale       = 1.0;
+      sceneTarget.particleMode= 'settle';
+      break;
+    case 'false-start':
+      sceneTarget.rotSpeed    = ROT_FALSE_START;
+      sceneTarget.scale       = 0.85;
+      sceneTarget.particleMode= 'scatter';
+      burstActive = true;
+      burstProgress = 0;
+      break;
+    case 'summary':
+      sceneTarget.rotSpeed    = ROT_SUMMARY;
+      sceneTarget.scale       = 0.8;
+      sceneTarget.particleMode= 'drift';
+      break;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   7. animate() — RAF loop; reads sceneTarget, never sets game state
+═══════════════════════════════════════════════════════════════════ */
+let lightAngle = 0;
+let currentScale = 1.0;
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const t = LERP_FACTOR;
+
+  // ── Lerp mesh color ───────────────────────────────────────────
+  // icoMat.color is the live color; we lerp it toward sceneTarget
+  icoMat.color.lerp(sceneTarget.meshColor, t);
+
+  // ── Lerp point light color ────────────────────────────────────
+  pointLight.color.lerp(sceneTarget.lightColor, t);
+
+  // ── Lerp mesh scale ───────────────────────────────────────────
+  currentScale += (sceneTarget.scale - currentScale) * 0.08;
+  icoMesh.scale.setScalar(currentScale);
+
+  // ── Rotate icosahedron ────────────────────────────────────────
+  icoMesh.rotation.x += sceneTarget.rotSpeed;
+  icoMesh.rotation.y += sceneTarget.rotSpeed * 0.7;
+
+  // ── Orbit the point light around the mesh ─────────────────────
+  lightAngle += 0.008;
+  pointLight.position.set(
+    Math.cos(lightAngle) * 3.5,
+    Math.sin(lightAngle * 0.6) * 1.5,
+    Math.sin(lightAngle) * 3.5
+  );
+
+  // ── Particle color lerp ───────────────────────────────────────
+  _particleColor.lerp(sceneTarget.particleColor, t);
+  const pr = _particleColor.r, pg = _particleColor.g, pb = _particleColor.b;
+  const colAttr = partGeo.attributes.color;
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    colAttr.array[i*3]   += (pr - colAttr.array[i*3])   * t;
+    colAttr.array[i*3+1] += (pg - colAttr.array[i*3+1]) * t;
+    colAttr.array[i*3+2] += (pb - colAttr.array[i*3+2]) * t;
+  }
+  colAttr.needsUpdate = true;
+
+  // ── Particle position update ──────────────────────────────────
+  const posAttr = partGeo.attributes.position;
+
+  if (sceneTarget.particleMode === 'idle') {
+    // Gentle drift around base positions — wave motion
+    const now = performance.now() * 0.0005;
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const bx = basePositions[i*3], by = basePositions[i*3+1], bz = basePositions[i*3+2];
+      posAttr.array[i*3]   = bx + Math.sin(now + i * 0.37) * 0.04;
+      posAttr.array[i*3+1] = by + Math.cos(now + i * 0.53) * 0.04;
+      posAttr.array[i*3+2] = bz + Math.sin(now + i * 0.41) * 0.04;
+    }
+  }
+  else if (sceneTarget.particleMode === 'burst' && burstActive) {
+    // Burst outward: push particles away from origin along their direction
+    burstProgress += BURST_SPEED;
+    if (burstProgress >= 1) { burstProgress = 1; burstActive = false; }
+    const ease = 1 - Math.pow(1 - burstProgress, 3); // cubic ease-out
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const bx = basePositions[i*3], by = basePositions[i*3+1], bz = basePositions[i*3+2];
+      const len = Math.sqrt(bx*bx + by*by + bz*bz) || 1;
+      const nx = bx/len, ny = by/len, nz = bz/len;
+      posAttr.array[i*3]   = bx + nx * ease * 2.5;
+      posAttr.array[i*3+1] = by + ny * ease * 2.5;
+      posAttr.array[i*3+2] = bz + nz * ease * 2.5;
+    }
+  }
+  else if (sceneTarget.particleMode === 'settle') {
+    // Return to base positions
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      posAttr.array[i*3]   += (basePositions[i*3]   - posAttr.array[i*3])   * 0.04;
+      posAttr.array[i*3+1] += (basePositions[i*3+1] - posAttr.array[i*3+1]) * 0.04;
+      posAttr.array[i*3+2] += (basePositions[i*3+2] - posAttr.array[i*3+2]) * 0.04;
+    }
+  }
+  else if (sceneTarget.particleMode === 'scatter' && burstActive) {
+    // False-start: chaotic random scatter with higher velocity
+    burstProgress += BURST_SPEED * 1.3;
+    if (burstProgress >= 1) { burstProgress = 1; burstActive = false; }
+    const ease = 1 - Math.pow(1 - burstProgress, 2);
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const bx = basePositions[i*3], by = basePositions[i*3+1], bz = basePositions[i*3+2];
+      // Each particle stored in velocities for chaotic direction
+      if (burstProgress < 0.02) {
+        velocities[i*3]   = (Math.random()-0.5) * 4;
+        velocities[i*3+1] = (Math.random()-0.5) * 4;
+        velocities[i*3+2] = (Math.random()-0.5) * 4;
+      }
+      posAttr.array[i*3]   = bx + velocities[i*3]   * ease;
+      posAttr.array[i*3+1] = by + velocities[i*3+1] * ease;
+      posAttr.array[i*3+2] = bz + velocities[i*3+2] * ease;
+    }
+  }
+  else if (sceneTarget.particleMode === 'drift') {
+    // Summary: particles slowly drift upward and sway
+    const now = performance.now() * 0.0003;
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      posAttr.array[i*3]   += Math.sin(now + i * 0.29) * 0.003;
+      posAttr.array[i*3+1] += DRIFT_SPEED;
+      // Wrap: reset to bottom when too high
+      if (posAttr.array[i*3+1] > 5) posAttr.array[i*3+1] = -5;
+      posAttr.array[i*3+2] += Math.cos(now + i * 0.41) * 0.002;
+    }
+  }
+
+  posAttr.needsUpdate = true;
+
+  // Slow particle rotation around Y to add global movement
+  particles.rotation.y += 0.0015;
+
+  renderer.render(scene, camera);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   8. GAME STATE
+═══════════════════════════════════════════════════════════════════ */
+let gameState = {
+  phase:       'idle',    // idle | waiting | react | result | false-start | summary
+  round:       0,         // 1-indexed current round (0 = not started)
+  results:     [],        // array of ms values
+  reactStart:  0,         // performance.now() when react triggered
+  waitTimeout: null,      // setTimeout handle for random delay
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   9. STATE MACHINE — setState drives everything
+═══════════════════════════════════════════════════════════════════ */
+function setState(newPhase, data = {}) {
+  // Clear any pending wait timeout when leaving waiting state
+  if (gameState.waitTimeout) {
+    clearTimeout(gameState.waitTimeout);
+    gameState.waitTimeout = null;
+  }
+
+  gameState.phase = newPhase;
+  Object.assign(gameState, data);
+
+  updateScene(newPhase);
+  render();
+
+  // Auto-advance logic
+  if (newPhase === 'result') {
+    // After 1s on result, either go to next round or summary
+    setTimeout(() => {
+      if (gameState.results.length >= TOTAL_ROUNDS) {
+        setState('summary');
+      } else {
+        setState('waiting');
+        scheduleReact();
+      }
+    }, 1200);
+  }
+  else if (newPhase === 'false-start') {
+    // Auto-resume waiting after penalty display
+    setTimeout(() => {
+      if (gameState.round <= TOTAL_ROUNDS) {
+        setState('waiting');
+        scheduleReact();
+      }
+    }, 1500);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   10. TIMING FUNCTIONS
+═══════════════════════════════════════════════════════════════════ */
+function scheduleReact() {
+  // Cryptographically seeded random for genuine unpredictability
+  const delay = MIN_DELAY + (MAX_DELAY - MIN_DELAY) * Math.random();
+  gameState.waitTimeout = setTimeout(() => {
+    gameState.reactStart = performance.now();
+    setState('react');
+  }, delay);
+}
+
+function startGame() {
+  gameState.round   = 1;
+  gameState.results = [];
+  setState('waiting');
+  scheduleReact();
+}
+
+function handleClick() {
+  const p = gameState.phase;
+
+  if (p === 'idle' || p === 'summary') {
+    startGame();
+  }
+  else if (p === 'waiting') {
+    // False start — clicked too early
+    setState('false-start');
+  }
+  else if (p === 'react') {
+    const elapsed = Math.round(performance.now() - gameState.reactStart);
+    gameState.results.push(elapsed);
+    gameState.round++;
+    setState('result', { lastResult: elapsed });
+  }
+  // Ignore clicks during result, false-start, summary auto-advances
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   11. UI RENDERING — reads game state, updates DOM only
+═══════════════════════════════════════════════════════════════════ */
+const panel       = document.getElementById('game-panel');
+const roundTrack  = document.getElementById('round-track');
+const stateLabel  = document.getElementById('state-label');
+const mainHeading = document.getElementById('main-heading');
+const subText     = document.getElementById('sub-text');
+const summaryBlock= document.getElementById('summary-block');
+const ctaBtn      = document.getElementById('cta-btn');
+const resultBadge = document.getElementById('result-badge');
+
+function buildRoundTrack() {
+  roundTrack.innerHTML = '';
+  for (let i = 1; i <= TOTAL_ROUNDS; i++) {
+    const pip = document.createElement('div');
+    pip.className = 'pip';
+    if (i < gameState.round && gameState.phase !== 'idle' && gameState.phase !== 'summary') {
+      pip.classList.add('done');
+    } else if (i === gameState.round && gameState.phase === 'react') {
+      pip.classList.add('active');
+    }
+    roundTrack.appendChild(pip);
+  }
+}
+
+function getRating(avg) {
+  if (avg < RATING_LIGHTNING) return { label: 'Lightning', cls: 'chip-lightning' };
+  if (avg < RATING_SHARP)     return { label: 'Sharp',     cls: 'chip-sharp' };
+  if (avg < RATING_AVERAGE)   return { label: 'Average',   cls: 'chip-average' };
+  return                             { label: 'Sluggish',   cls: 'chip-sluggish' };
+}
+
+function render() {
+  const p = gameState.phase;
+
+  // Panel class for CSS overrides
+  panel.className = `state-${p}`;
+
+  // Round track
+  buildRoundTrack();
+
+  // Result badge — show last result if available in result state
+  if (p === 'result' && gameState.lastResult != null) {
+    resultBadge.textContent = `Round ${gameState.results.length} — ${gameState.lastResult} ms`;
+    resultBadge.classList.add('visible');
+  } else {
+    resultBadge.classList.remove('visible');
+    resultBadge.textContent = '';
+  }
+
+  // Summary block
+  summaryBlock.classList.remove('visible');
+  summaryBlock.innerHTML = '';
+
+  switch (p) {
+    case 'idle':
+      stateLabel.textContent  = 'Reaction Timer';
+      mainHeading.textContent = 'React.';
+      mainHeading.className   = '';
+      subText.textContent     = 'How fast are you?';
+      ctaBtn.className        = 'variant-start';
+      ctaBtn.textContent      = 'Start';
+      break;
+
+    case 'waiting':
+      stateLabel.textContent  = `Round ${gameState.round} of ${TOTAL_ROUNDS}`;
+      mainHeading.textContent = 'Get ready...';
+      mainHeading.className   = '';
+      subText.textContent     = 'Wait for the signal.';
+      ctaBtn.className        = 'hidden';
+      break;
+
+    case 'react':
+      stateLabel.textContent  = `Round ${gameState.round} of ${TOTAL_ROUNDS}`;
+      mainHeading.textContent = 'GO!';
+      mainHeading.className   = '';
+      mainHeading.style.color = 'var(--go)';
+      subText.textContent     = 'Click or tap now!';
+      ctaBtn.className        = 'hidden';
+      break;
+
+    case 'result': {
+      const ms = gameState.lastResult;
+      stateLabel.textContent  = `Round ${gameState.results.length} complete`;
+      mainHeading.textContent = `${ms} ms`;
+      mainHeading.className   = 'mono';
+      mainHeading.style.color = '';
+      subText.textContent     = ms < RATING_LIGHTNING ? '⚡ Incredible reflexes!'
+                              : ms < RATING_SHARP     ? 'Nice — sharp!'
+                              : ms < RATING_AVERAGE   ? 'Pretty average.'
+                              : 'Bit slow there.';
+      ctaBtn.className        = 'hidden';
+      break;
+    }
+
+    case 'false-start':
+      stateLabel.textContent  = `Round ${gameState.round} of ${TOTAL_ROUNDS}`;
+      mainHeading.textContent = 'Too early!';
+      mainHeading.className   = '';
+      mainHeading.style.color = 'var(--false-start)';
+      subText.textContent     = 'Wait for GO before clicking.';
+      ctaBtn.className        = 'hidden';
+      // Trigger shake animation
+      panel.classList.remove('shake');
+      void panel.offsetWidth; // reflow to restart animation
+      panel.classList.add('shake');
+      break;
+
+    case 'summary': {
+      const res  = gameState.results;
+      const avg  = Math.round(res.reduce((a,b)=>a+b,0) / res.length);
+      const best = Math.min(...res);
+      const worst= Math.max(...res);
+      const { label, cls } = getRating(avg);
+
+      stateLabel.textContent  = 'Session complete';
+      mainHeading.textContent = 'Results';
+      mainHeading.className   = '';
+      mainHeading.style.color = '';
+      subText.textContent     = '';
+
+      summaryBlock.classList.add('visible');
+      summaryBlock.innerHTML = `
+        <div id="rating-chip" class="${cls}">${label}</div>
+        <div class="summary-stat">
+          <span class="label">AVERAGE</span>
+          <span class="value highlight">${avg} ms</span>
+        </div>
+        <div class="summary-stat">
+          <span class="label">BEST</span>
+          <span class="value">${best} ms</span>
+        </div>
+        <div class="summary-stat">
+          <span class="label">WORST</span>
+          <span class="value">${worst} ms</span>
+        </div>
+        <div id="round-history">
+          ${res.map((ms, i) => `
+            <div class="history-row">
+              <span class="r-label">Round ${i+1}</span>
+              <span class="r-val">${ms} ms</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      ctaBtn.className  = 'variant-again';
+      ctaBtn.textContent = 'Play again';
+      break;
+    }
+  }
+
+  // Reset heading color on non-colored states
+  if (p !== 'react' && p !== 'false-start') {
+    mainHeading.style.color = '';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   12. EVENT LISTENERS — call state machine only
+═══════════════════════════════════════════════════════════════════ */
+// The whole panel is the click target (large, accessible tap zone)
+panel.addEventListener('click', (e) => {
+  // Prevent double-fire when clicking the CTA button itself
+  e.stopPropagation();
+  handleClick();
+});
+
+ctaBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  handleClick();
+});
+
+// Spacebar on desktop
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'Enter') {
+    e.preventDefault();
+    handleClick();
+  }
+});
+
+// Resize handler — update renderer and camera
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   13. INIT
+═══════════════════════════════════════════════════════════════════ */
+function init() {
+  // Set idle scene state before first render
+  updateScene('idle');
+  // Render UI
+  render();
+  // Kick off the animation loop
+  animate();
+}
+
+init();
+</script>
+</body>
+</html>
