@@ -979,8 +979,7 @@
         panelContent.innerHTML = `
           <p class="eyebrow">Reaction Timer</p>
           <h1 class="title">React. <span class="title-accent">How fast are you?</span></h1>
-          <p class="subtitle">${TOTAL_ROUNDS} rounds. Click the moment you see <strong>GO</strong>.</p>
-          <div class="hint">Click anywhere · Spacebar</div>
+          <p class="subtitle">${TOTAL_ROUNDS} rounds. Once started, click anywhere — or press <strong>Space</strong> — the moment you see <strong>GO</strong>.</p>
           <div><button class="btn" type="button">Start</button></div>
         `;
       } else if (s === 'waiting') {
@@ -1057,9 +1056,6 @@
      * ============================================================ */
     function handleAction() {
       switch (gameState.state) {
-        case 'idle':
-          startSession();
-          break;
         case 'waiting':
           handleFalseStart();
           break;
@@ -1073,20 +1069,34 @@
           // Retry current round — round number stays the same
           startWaiting();
           break;
-        case 'summary':
-          startSession();
-          break;
+        // idle & summary intentionally fall through — only the explicit
+        // Start / Play again button is allowed to begin a session.
       }
     }
 
     // pointerdown beats click by ~50–100ms and works for touch + mouse
-    // uniformly — critical for honest reaction timing.
+    // uniformly — critical for honest reaction timing during play.
     document.addEventListener('pointerdown', handleAction);
 
     document.addEventListener('keydown', (e) => {
       if ((e.code === 'Space' || e.key === ' ') && !e.repeat) {
+        // Don't hijack space on idle/summary — let the focused button
+        // handle it natively (keyboard accessibility for the Start button).
+        if (gameState.state === 'idle' || gameState.state === 'summary') return;
         e.preventDefault();
         handleAction();
+      }
+    });
+
+    // Delegated click handler: only the button inside the panel can start
+    // a session. This is intentionally separate from the document-level
+    // pointerdown handler so empty clicks on the canvas never start a game.
+    panel.addEventListener('click', (e) => {
+      const target = e.target;
+      const btn = target instanceof Element ? target.closest('button.btn') : null;
+      if (!btn) return;
+      if (gameState.state === 'idle' || gameState.state === 'summary') {
+        startSession();
       }
     });
 
